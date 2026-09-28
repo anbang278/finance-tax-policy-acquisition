@@ -1,0 +1,25 @@
+sources:
+  mof:
+    name: 中华人民共和国财政部政策发布
+    entry: https://www.mof.gov.cn/zhengwuxinxi/zhengcefabu/
+    allowed_hosts:
+      - www.mof.gov.cn
+      - gks.mof.gov.cn
+      - jrs.mof.gov.cn
+      - jkw.mof.gov.cn
+      - szs.mof.gov.cn
+      - kjs.mof.gov.cn
+      - yss.mof.gov.cn
+      - jjs.mof.gov.cn
+      - gss.mof.gov.cn
+      - sbs.mof.gov.cn
+      - zwgls.mof.gov.cn
+      - nys.mof.gov.cn
+    listing_date_kind: column_date
+  chinatax:
+    name: 国家税务总局政策法规库
+    entry: https://fgk.chinatax.gov.cn/zcfgk/c100006/listflfg.html
+    allowed_hosts:
+      - fgk.chinatax.gov.cn
+      - www.chinatax.gov.cn
+    listing_date_kind: issued_date

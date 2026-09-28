@@ -1,0 +1,28 @@
+# 本地系统文件与凭据
+.DS_Store
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+*.p12
+*.pfx
+
+# 开发环境、缓存与构建产物
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+node_modules/
+dist/
+build/
+
+# 本地采集数据
+.ftr-data/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
