@@ -73,7 +73,7 @@
 | 文档导航 | PASS（本机） | 21 份当前 Markdown 的相对链接与 frontmatter `depends_on` 路径通过检查；当前文档不再使用 Obsidian 双链 |
 | 宿主入口 | PASS（静态） | 两个 JSON 清单可解析，Codex Skill 目录存在且包含五份 `SKILL.md`；未执行宿主实际加载或模型会话 |
 | 文件迁移完整性 | PASS | 对照迁移前项目外快照核验 36 个代码、测试及插件文件字节一致；历史交接原文保持一致 |
-| 跨平台与远程 CI | 未验证 | 本机没有运行 Windows/Linux；未推送，因此 GitHub Actions 尚未运行 |
+| 跨平台与远程 CI | PASS | 2026-10-01 GitHub Actions 三平台工作流 [36875496920](https://github.com/anbang278/finance-tax-policy-acquisition/actions/runs/36875496920)：macOS、Windows、Ubuntu 的锁定依赖与 Chromium 安装、完整测试与静态检查、构建及独立 wheel 安装均通过。Actions 对 `checkout@v4`、`setup-python@v5` 给出 Node.js 20 迁移警告，不影响本次通过结果 |
 
 本结果证明仓库结构在当前 macOS 环境可安装、测试和构建，不代表完整跨平台、来源覆盖、宿主会话或生产验收通过。公开前的许可证确认与完整敏感信息审查仍需单独完成。
 
