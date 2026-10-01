@@ -26,3 +26,10 @@ build/
 *.sqlite3
 *.sqlite3-wal
 *.sqlite3-shm
+
+# 本机运行配置（可能含凭据）
+ftr.local.yaml
+ftr.yaml
+
+# 本机保留的迁移前运行环境与历史仓库，不属于新根目录工程
+/finance-tax-research/

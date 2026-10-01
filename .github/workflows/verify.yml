@@ -1,0 +1,37 @@
+name: 三平台运行验证
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      PYTHONUTF8: '1'
+      FTR_WEB_BROWSER: '1'
+      FTR_NETWORK__PROXY_MODE: direct
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: 安装锁定依赖与浏览器
+        run: |
+          python -m pip install uv
+          uv sync --frozen --extra dev --extra web
+          uv run playwright install --with-deps chromium
+      - name: 测试与静态检查
+        run: |
+          uv run --extra dev --extra web pytest -q
+          uv run --extra dev --extra web ruff check src tests scripts
+          uv run --extra dev --extra web mypy --ignore-missing-imports src
+      - name: 构建与独立安装检查
+        run: |
+          uv build
+          python scripts/verify_wheel.py

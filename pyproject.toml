@@ -1,0 +1,42 @@
+[project]
+name = "finance-tax-research"
+version = "0.1.0"
+description = "财税公开资料采集与证据管理（本地演示）"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "pydantic>=2,<3",
+    "httpx>=0.28,<1",
+    "lxml>=5,<7",
+    "pypdf>=6,<7",
+    "playwright>=1.55,<2",
+    "pyyaml>=6,<7",
+    "requests>=2.32,<3",
+    "portalocker>=3,<5",
+]
+
+[project.scripts]
+ftr = "ftr.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "ruff>=0.13,<1", "mypy>=1.18,<2"]
+web = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1"]
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ftr"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"config/sources.yaml" = "ftr/data/sources.yaml"
+"contracts/official-material.yaml" = "ftr/data/official-material.yaml"
+"DESIGN_CONSTITUTION.md" = "ftr/data/DESIGN_CONSTITUTION.md"
+"ARCHITECTURE.md" = "ftr/data/ARCHITECTURE.md"
+"ftr.example.yaml" = "ftr/data/ftr.example.yaml"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100

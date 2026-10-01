@@ -1,0 +1,51 @@
+# 测试与验收计划
+
+## 自动测试
+
+在仓库根目录运行 `uv run --extra dev --extra web pytest -q`、`uv run --extra dev --extra web ruff check src tests scripts`、`uv run --extra dev --extra web mypy --ignore-missing-imports src`、`uv build` 和 `python scripts/verify_wheel.py`。安装包从非源码目录读取配置和静态资源。真实来源测试与离线测试分开记录。
+
+| 验收 | 预期 |
+|---|---|
+| 来源列表与详情 | 财政部、税务总局各有真实样本，第一页和第二页字段可核验 |
+| 时间范围缺失 | Skill 先反问；CLI 缺任一起止日期时拒绝创建任务，不自动补默认期限 |
+| 日期 | 财政部栏目日期、税务成文日期及正文日期分离 |
+| 内容分类 | 原文、解读、发布消息保留，不允许错误页进入正式检索 |
+| 附件 | PDF 有文本或扫描状态；Word、Excel 原件保存且标注未解析 |
+| 恢复 | 分页中断、资料失败和重复调用不会假报完成 |
+| 决策 | 陈旧摘要、错误证据、重复不同结果被拒绝 |
+| 版本 | 相同 URL 原文修订新增版本，旧证据不被覆盖 |
+| 修复 | 越界补丁拒绝，缺隔离环境时候选不可测试和发布 |
+| 研究 | 每项引用与已验证版本及原文摘录匹配 |
+| 双宿主 | Codex 与 Hermes 分别确认加载与调用，不以静态清单代替运行验收 |
+
+## 分级报告
+
+`PASS` 表示该项实测成功，`PARTIAL` 表示功能只覆盖部分范围，`BLOCKED` 表示环境或本期边界阻断。离线模拟、真实站点、模型语义、宿主加载、正式隔离分别记录。原交接文档 A05 改为“错误内容或错误分类不得通过”；A11、A14—A20 中涉及隔离执行和正式发布的部分延期，保留编号。
+
+## 本机政策工作台验收（2026-09-30）
+
+在仓库根目录运行 `FTR_WEB_BROWSER=1 uv run --extra dev --extra web pytest -q`、`uv run --extra dev --extra web ruff check src tests scripts`、`uv run --extra dev --extra web mypy --ignore-missing-imports src`、`uv build` 和 `python scripts/verify_wheel.py`。新增代码和改动的 CLI 另做 `ruff format --check src/ftr/web src/ftr/cli.py tests/test_web.py`。浏览器需要已安装 Chromium；普通测试不设置 `FTR_WEB_BROWSER` 时跳过浏览器用例。
+
+| 验收 | 预期 |
+|---|---|
+| 实际数据 | 首页最新资料与各质量状态计数等于只读 SQL 结果，不使用 Demo 内嵌数据 |
+| 默认准入 | Web 默认展示全部质量；CLI 和研究检索仍仅返回已复核最新资料 |
+| 筛选与版本 | 中文标题、文号、正文及组合筛选正确；最新版本先选取后筛选，历史正文可单独阅读 |
+| 队列口径 | 五种已有条目状态单列；规范化 URL 可关联资料，复用资料不增加本任务版本数 |
+| 内容与下载 | 不执行正文 HTML；保存与解析状态分开，原件哈希、路径边界和下载附件头正确 |
+| 错误区分 | 缺库与空库、坏库、锁冲突、不存在记录、证据缺失和损坏均可识别 |
+| 并发只读 | 采集锁持有时查询可用；Web 请求不改数据库，后续查询能读取新提交的状态 |
+| 浏览器链路 | 搜索→阅读→版本→附件→关联任务→失败队列→事件与失败可操作 |
+| 刷新 | 5 秒刷新不丢筛选或阅读位置；断连保留旧内容，恢复可查询；隐藏页面不轮询 |
+| 窄屏与安装 | 390px 宽度可进入详情并返回列表；独立 wheel 从源码目录之外启动，资源/API 可用 |
+
+真实政策数据只用于只读核验；运行中任务、状态更新、正文注入和失败场景均使用临时数据库，不额外启动真实采集。
+
+
+## 跨环境配置回归（2026-09-30）
+
+迁移前在工程子目录运行 `uv sync --frozen --extra dev --extra web`、完整 pytest、ruff、mypy 与 `uv build`，并使用 `python ../scripts/verify_wheel.py` 验证独立安装。仓库重排后的命令统一从根目录执行，见 [REGRESSION](../../tests/REGRESSION.md)。浏览器运行设置 FTR_WEB_BROWSER=1；PowerShell 用 `$env:FTR_WEB_BROWSER='1'`。CI 使用 Python 3.13 的 macOS、Windows、Ubuntu 三平台矩阵。
+
+新增覆盖：逐层覆盖与相对路径、未知/重复键、无效输入无目录写入、凭据脱敏、预算实际生效与旧任务冻结；跨进程非阻塞锁与异常退出释放；旧 Windows 清单迁移、特殊路径 URI、外平台盘符/UNC 越界；直连/代理一致性与映射网段例外；浏览器启动与导航参数、财政部不启动浏览器、Linux 无显示失败；续跑配置审计；局域网 Host、ui-config 参数白名单与只读。
+
+人工独立验收：Windows 原生全链路、Linux Xvfb + 税务实采、另一台电脑访问局域网工作台、Codex/Hermes 实际模型会话。未运行保持 PARTIAL/BLOCKED，不由 mock、CI 配置文件或本机浏览器替代。
