@@ -266,7 +266,8 @@ def test_full_tax_rule_closed_loop(tmp_path, monkeypatch):
         "ftr.network.BrowserSessionClient.get",
         lambda _, url: (sample["detail"].encode(), url, "text/html"),
     )
-    settings = RuntimeSettings(data_dir=root)
+    # This closed-loop test uses a fake browser and needs no desktop session.
+    settings = RuntimeSettings(data_dir=root, browser={"headless": True})
     assert verify_candidate(root, repo, candidate, settings, live=True)["state"] == "RULE_VERIFIED"
     assert activate(root, repo, candidate, settings)["state"] == "RULE_ACTIVE"
     assert repo.db.execute("SELECT quality_state FROM documents").fetchone()[0] == "collected"
