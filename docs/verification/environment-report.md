@@ -36,7 +36,7 @@ confidence: local_execution_evidence
 | IPv6 回环监听 | PASS（本机范围） | 真正启动 ::1，通过 IPv6 查询配置和资料 API，隔离数据库未改写 |
 | Windows 原生 | PARTIAL | 移除 fcntl，加入跨平台锁、Windows 清单、盘符/UNC 拒绝及 PowerShell 文档；真实 Windows 运行待验证 |
 | Linux / Xvfb | PARTIAL | 显示检查、启动参数与安装手册具备；Linux 运行、Xvfb 会话、税务实采待验证 |
-| 三平台 CI | PARTIAL | 工作流已形成；尚未提交、推送或远程执行，不计各平台通过 |
+| 三平台 CI（旧基线） | PASS | 2026-10-01 工作流 36875496920 三平台通过，详见验收记录；本轮新代码尚未远程执行 |
 | 另一台电脑访问工作台 | PARTIAL | 监听能力本机通过；真实网络、客户端与端口可达性待验收 |
 | Codex/Hermes 模型全链路 | PARTIAL | 本轮仅更新配置说明与 Controller 入口，未重新实装或执行真实模型复核/研究 |
 | 正式治理与发布 | BLOCKED | 可信隔离执行、独立批准、发布与回退仍未实施 |
@@ -49,3 +49,9 @@ confidence: local_execution_evidence
 - 分别验证两个宿主能使用同一安装环境与绝对配置调用 CLI，完成实际语义回调与引用研究。
 
 项目与工程目录各自存在 Git 仓库，本轮检查两层状态并保留原有工作台修改。未提交、推送、部署常驻服务或写入长期记忆。
+
+## 本轮环境补充（2026-10-02）
+
+当前 macOS/Python 3.13 本机完整浏览器回归 120 项通过；固定规则执行、工作台真实隔离进程及独立 wheel 验证通过。环境引导使用下载/命令替身覆盖缺依赖和错误路径，未计新设备真实安装通过。PowerShell 脚本已加入 Windows CI 语法检查，本机未执行 Windows PowerShell；新 CI 尚未推送/运行。
+
+本轮无真实源站采集、宿主插件安装或模型全链路。Windows/macOS 双宿主四组合、伙伴实际网络、Linux Xvfb 与真实来源仍待验收。详细结果与边界见 acceptance-report.md 本轮补充，不以旧基线 CI 覆盖本轮新功能。

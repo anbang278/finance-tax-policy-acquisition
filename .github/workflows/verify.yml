@@ -26,6 +26,14 @@ jobs:
           python -m pip install uv
           uv sync --frozen --extra dev --extra web
           uv run playwright install --with-deps chromium
+      - name: Windows 引导脚本语法
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path scripts/setup.ps1), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count) { throw ($errors | Out-String) }
       - name: 测试与静态检查
         run: |
           uv run --extra dev --extra web pytest -q

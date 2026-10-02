@@ -47,9 +47,9 @@ Adapter 修复与普通授权工程开发分开。Repair 仅登记允许路径�
 
 ## Codex / Hermes 接入
 
-完整插件目录分别包含 `.codex-plugin/plugin.json` 和根 `plugin.json`，共享五个 Skill。两个宿主必须能找到同一个已安装 `ftr`，并继承相同绝对 `FTR_CONFIG` 或 FTR_DATA_DIR。Windows 入口是 `Scripts/ftr.exe`，macOS/Linux 是 `bin/ftr`；可将安装环境入口加入宿主进程 PATH。
+完整插件目录分别包含 `.codex-plugin/plugin.json` 和根 `plugin.json`，共享七个 Skill。两个宿主必须能找到同一个已安装 `ftr`，并继承相同绝对 `FTR_CONFIG` 或 FTR_DATA_DIR。Windows 入口是 `Scripts/ftr.exe`，macOS/Linux 是 `bin/ftr`；优先由 setup 返回绝对 Python 与配置，用 `python -m ftr.cli --config CONFIG` 调用。
 
-宿主安装方式以目标环境实际能力为准，本次不自动修改用户宿主设置。分别验收：清单校验 → 五个 Skill 可加载 → 模型会话成功调用 doctor/CLI → 待复核资料回调 → 带引用研究。仅清单有效或 wheel 可运行不能计为宿主全链路通过。
+宿主安装方式以目标环境实际能力为准，本次不自动修改用户宿主设置。分别验收：清单校验 → 七个 Skill 可加载 → 模型会话成功调用 doctor/CLI → 待复核资料回调 → 带引用研究。仅清单有效或 wheel 可运行不能计为宿主全链路通过。
 
 ## 验证与交接材料
 

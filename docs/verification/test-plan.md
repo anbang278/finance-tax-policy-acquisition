@@ -49,3 +49,13 @@
 新增覆盖：逐层覆盖与相对路径、未知/重复键、无效输入无目录写入、凭据脱敏、预算实际生效与旧任务冻结；跨进程非阻塞锁与异常退出释放；旧 Windows 清单迁移、特殊路径 URI、外平台盘符/UNC 越界；直连/代理一致性与映射网段例外；浏览器启动与导航参数、财政部不启动浏览器、Linux 无显示失败；续跑配置审计；局域网 Host、ui-config 参数白名单与只读。
 
 人工独立验收：Windows 原生全链路、Linux Xvfb + 税务实采、另一台电脑访问局域网工作台、Codex/Hermes 实际模型会话。未运行保持 PARTIAL/BLOCKED，不由 mock、CI 配置文件或本机浏览器替代。
+
+## 伙伴开箱使用与受限规则闭环（2026-10-02）
+
+本轮在原两来源范围内新增 setup、workbench Skill；用户级环境引导返回绝对运行路径，按来源/查询能力安装依赖，不触发采集。只读工作台新增启动、复用、身份验证停止及自动打开浏览器接口。
+
+受限规则自修复使用固定执行器与可信样本，支持列表/正文定位、预定义日期、分页和 JSON 字段映射；失败原件绑定候选及验证报告，最多两轮候选。有界真实来源验证通过后自动本机启用并续跑，失败及中断回退；不执行未知 Python，不更改资料复核门槛，governed 仍未开放。详见 ../guides/self-repair.md 与当前架构。
+
+追踪入口：setup → scripts/setup.sh、setup.ps1、setup_runtime.py → tests/test_setup.py；规则闭环 → rules.py、rule_repair.py、runtime.py → tests/test_rule_repair.py；工作台 → workbench.py → tests/test_workbench_lifecycle.py。既有回归、wheel 与三平台 CI 继续执行。
+
+验收须分开记录离线故障注入、真实源站及 macOS/Windows × Codex/Hermes 会话。受控网络替身不代表真实访问成功，缺宿主/设备不能计通过。当前实现结果以 acceptance-report.md 本轮补充为准。

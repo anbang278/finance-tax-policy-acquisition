@@ -11,7 +11,7 @@
 - 采集前由用户明确时间范围；可唯一换算的相对区间转为具体起止日期并告知用户。未说明、只说明单侧边界或仅说“最近”等模糊时间时，先反问，不默认采集过去一年。支持指定日期和历史回填；日期口径逐来源显示。
 - 两个栏目全部直接条目纳入，类型分别标记；只自动取直接附件，不递归抓取关联页面。
 - HTML 与文本 PDF 可解析；Word、Excel、扫描件保留原件并展示内容限制。
-- 一份 Python 核心、五个 Skill、Codex 和 Hermes 两套安装清单。
+- 一份 Python 核心、七个 Skill、Codex 和 Hermes 两套安装清单。
 - 本地演示可以采集、存证、复核、检索、研究、生成补丁候选；没有隔离执行环境不运行未知补丁。
 
 ## 使用场景
@@ -25,7 +25,7 @@
 - 两来源能分别完成真实列表、详情和附件路径抽查；网络受限时给出可追踪失败。
 - 中断续跑不覆盖证据或重复建资料；旧版本仍可引用。
 - 未复核或内容不完整的资料默认不进入正式检索。
-- 候选修复止于 `PATCH_PROPOSED`，`repair test` 与 `governed` 明确阻塞。
+- Python 候选修复止于 `PATCH_PROPOSED`，`repair test` 与 `governed` 明确阻塞；受限规则采用本轮增量闭环。
 - Codex 与 Hermes 分别从安装包加载 Skill；加载成功和语义质量分别记录。
 
 ## 不在首版
@@ -43,3 +43,13 @@
 - Linux 无桌面税务采集提供 Chromium + Xvfb 运行方式，源站准入须实测。
 - 本次不增加 Docker、定时采集、来源扩展、模型 API 服务或正式发布能力。
 - 验收以参数实际生效、无效输入无业务写入、锁与迁移兼容、独立 wheel 运行及分环境证据为准；模拟测试不代替真实跨系统/跨电脑访问。
+
+## 伙伴开箱使用与受限规则闭环（2026-10-02）
+
+本轮在原两来源范围内新增 setup、workbench Skill；用户级环境引导返回绝对运行路径，按来源/查询能力安装依赖，不触发采集。只读工作台新增启动、复用、身份验证停止及自动打开浏览器接口。
+
+受限规则自修复使用固定执行器与可信样本，支持列表/正文定位、预定义日期、分页和 JSON 字段映射；失败原件绑定候选及验证报告，最多两轮候选。有界真实来源验证通过后自动本机启用并续跑，失败及中断回退；不执行未知 Python，不更改资料复核门槛，governed 仍未开放。详见 ../guides/self-repair.md 与当前架构。
+
+追踪入口：setup → scripts/setup.sh、setup.ps1、setup_runtime.py → tests/test_setup.py；规则闭环 → rules.py、rule_repair.py、runtime.py → tests/test_rule_repair.py；工作台 → workbench.py → tests/test_workbench_lifecycle.py。既有回归、wheel 与三平台 CI 继续执行。
+
+验收须分开记录离线故障注入、真实源站及 macOS/Windows × Codex/Hermes 会话。受控网络替身不代表真实访问成功，缺宿主/设备不能计通过。当前实现结果以 acceptance-report.md 本轮补充为准。

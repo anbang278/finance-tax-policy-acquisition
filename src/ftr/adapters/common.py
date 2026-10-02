@@ -47,8 +47,13 @@ def classify(title: str, source_hint: str | None, body: str, source_id: str) -> 
     return DocumentType.OTHER
 
 
-def parse_detail(ref: DiscoveredRef, raw: bytes, evidence_id: str) -> DocumentRecord:
-    tree = html.fromstring(raw, parser=html.HTMLParser(encoding="utf-8"))
+def parse_detail(ref: DiscoveredRef, raw: bytes, evidence_id: str, rules=None) -> DocumentRecord:
+    if rules is not None:
+        from ftr.rules import bounded_tree
+
+        tree = bounded_tree(raw)
+    else:
+        tree = html.fromstring(raw, parser=html.HTMLParser(encoding="utf-8"))
     if ref.source_id == "chinatax":
         heads = tree.xpath("//div[contains(@class,'detials')]//h3[1]") or tree.xpath("//h3")
         title = text_of(heads[0]) if heads else ref.listing_title
@@ -87,6 +92,15 @@ def parse_detail(ref: DiscoveredRef, raw: bytes, evidence_id: str) -> DocumentRe
         status_text = ""
         issued = None
         published = None
+    if rules is not None:
+        from ftr.rules import nodes
+
+        if rules.titles:
+            heads = nodes(tree, rules.titles)
+            title = text_of(heads[0]) if heads else ""
+        if rules.bodies:
+            body_nodes = nodes(tree, rules.bodies)
+            body = text_of(body_nodes[0]) if body_nodes else ""
     if not body:
         # 只保存可核验的页面文本，并保持隔离状态；不会误称正文完整。
         body = ""

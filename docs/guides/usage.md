@@ -122,3 +122,17 @@ CLI 响应字段为 `schema_version/operation/task_id/status/data/errors/warning
 | `GET /api/evidence/{id}/download` | 登记原件，校验路径与哈希后以附件下载 |
 
 分页返回 `items/total/page/page_size`，page 从 1 开始，page_size 上限 100。业务响应包含 `queried_at`；错误包含 `error.code/error.message`。日期筛选使用 listing_date，最新版本先选取再筛选。Web 不提供采集、复核或其他写入接口。
+
+## 环境与工作台入口（2026-10-02）
+
+完整插件目录可通过 setup Skill 自动准备用户级环境；入口、能力选项与绝对调用路径见安装指南。后续调用不要依赖宿主 PATH 中的 ftr。
+
+```sh
+ftr workbench start --open
+ftr workbench status
+ftr workbench stop
+```
+
+start 仅回环监听，复用同资料目录已健康服务，按 8765–8774 尝试端口。启动后校验私有进程身份及只读 API；浏览器打开失败仍返回 URL。缺资料库不创建；stop 验证身份后停止本应用，不杀端口上的其他程序。已有前台 serve 命令保持可用，单独管理的 serve 不属于 lifecycle 进程。
+
+规则自修复使用增量 repair 子命令，见[专门指南](self-repair.md)。旧 repair test 仍禁止未知代码执行，release status/governed 仍阻塞。RULE_ACTIVE 仅表示规则本机生效及首次续跑成功，不表示任务全部完成或资料自动通过复核。

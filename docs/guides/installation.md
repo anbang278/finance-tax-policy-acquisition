@@ -11,6 +11,30 @@ confidence: implementation_verified_locally
 
 需要 Python 3.13（当前包声明 `>=3.13,<3.14`）。优先使用 uv 与仓库 `uv.lock` 重现依赖；Web 是可选 extra，Chromium 仅用于税务采集及浏览器测试。不要复制其他机器的 `.venv` 或浏览器安装目录，每台机器重新安装。
 
+## 非技术伙伴与宿主引导
+
+完整插件目录提供 `setup` Skill 和引导脚本。macOS 执行 `sh scripts/setup.sh all`，Windows 执行 `& .\scripts\setup.ps1 -Capability all`；能力选项为 mof/chinatax/workbench/all。先检测 uv/Python，再按需要同步依赖；无需先有 ftr。已有 Python 由独立虚拟环境复用，缺 Python 时由 uv 下载到用户级 managed storage。不会修改系统 Python、shell profile、全局代理或已有配置。
+
+缺 uv 的桌面机器从 [Astral 官方 release 0.8.22](https://github.com/astral-sh/uv/releases/tag/0.8.22) 下载对应架构制品并核对仓库固定 SHA-256；已有 PATH 或专属用户目录中的 uv 直接复用。用户目录为 macOS `~/.local/share/ftr/bootstrap/bin`，Windows `%LOCALAPPDATA%/FTR/bootstrap/bin`。本机依赖仍由 uv.lock 锁定，浏览器由已锁定 Playwright 安装。Python 自动下载方式见 [uv 官方说明](https://docs.astral.sh/uv/guides/install-python/)。
+
+引导返回 ENVIRONMENT_READY/BLOCKED、绝对 python/config/data_dir、分项依赖和浏览器实际启动结果；后续调用 `"绝对 Python" -m ftr.cli --config "绝对配置" ...`，避免宿主 PATH 差异。已指定 FTR_CONFIG 但文件缺失时明确失败，不另建配置。网络安装失败保留配置，重复运行继续补齐。安装只是本机准备，不证明源站接受访问。
+
+Linux 缺 uv 或浏览器系统库时按官方安装和下文系统依赖说明人工处理；不自动 sudo。Windows 执行策略由用户按组织规则处理，脚本不修改永久执行策略。Chromium 启动空白页检查不采集，不建立数据库。
+
+
+## 覆盖范围与环境要求
+
+| 使用范围 | 实际覆盖与日期语义 | 本机环境要求 |
+|---|---|---|
+| 财政部 `mof` | 仅“政策发布”栏目直接条目及直接附件；默认日期为栏目日期 | uv、Python 3.13、锁定核心依赖；HTTP 采集无需 Chromium |
+| 税务总局 `chinatax` | 仅登记的政策法规库栏目直接条目及直接附件；默认日期为成文日期 | 核心环境、Chromium、可用显示环境；浏览器会话与本机网络出口须源站接受 |
+| 本机查询工作台 | 已保存资料、任务、版本和原件；不代表官网实时状态 | 核心环境与 Web extra；无需 Chromium、无需政策源站网络 |
+| Linux 无桌面税务 | 与税务栏目范围相同；源站准入需实测 | Chromium 系统库、Xvfb/xauth；管理员系统安装由部署者完成，本轮桌面验收不含此场景 |
+
+当前两个入口不等于全国官方财税法规政策全集，不覆盖地方政策、其他官方机构或递归关联页面。两来源均支持指定起止日期、历史回填和断点续跑，但不能把有限预算、14 天增量回看或 CI 测试称为完整历史覆盖证明。
+
+HTML 和文本 PDF 可提取；Word、Excel、扫描件仅保留原件并显示限制。附件下载成功不代表正文可供研究；未复核资料默认不进入研究检索。成文、发布、施行日期与法律效力需分别判断，缺失日期不猜补。
+
 ## macOS / Linux 源码安装
 
 安装 uv 后在仓库根目录运行：
@@ -100,4 +124,4 @@ uv run --extra web ftr --config /srv/ftr/ftr.yaml serve --host 0.0.0.0 --port 87
 
 使用浏览器访问 `http://服务器实际IP:8765`；`0.0.0.0` 不是客户端访问地址。IPv6 示例：监听 `--host ::`，访问 `http://[服务器IPv6]:8765`。客户端需能到达该端口，网络或操作系统防火墙的放行由部署环境负责。本次不新增认证或访问名单。
 
-前台按 `Ctrl+C` 停止。服务器常驻运行由部署者接入已有进程管理器，明确工作目录、安装环境、绝对配置路径和运行用户；本次不新增定时采集或后台 Agent。
+前台按 `Ctrl+C` 停止。服务器常驻运行由部署者接入已有进程管理器，明确工作目录、安装环境、绝对配置路径和运行用户；本次不新增定时采集或后台 Agent。工作台 lifecycle 命令可以单独管理只读查询进程。

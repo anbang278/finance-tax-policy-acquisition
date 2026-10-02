@@ -38,6 +38,7 @@ from ftr.network import (
     resolve_proxy,
 )
 from ftr.repository import Repository
+from ftr.rules import Rules, StructureDrift, active_rules
 
 
 class BudgetReached(RuntimeError):
@@ -68,6 +69,8 @@ class Collector:
         settings: RuntimeSettings | None = None,
         *,
         proxy: object = _PROXY_UNSET,
+        rule_overrides: dict[str, Rules] | None = None,
+        detail_limit: int | None = None,
     ):
         self.settings = settings or RuntimeSettings(data_dir=data_dir)
         selected = resolve_proxy(self.settings.network) if proxy is _PROXY_UNSET else proxy
@@ -77,6 +80,15 @@ class Collector:
         self.repo = Repository(data_dir)
         self.evidence = EvidenceStore(data_dir)
         self.sources = load_sources().sources
+        self.rules = {
+            key: (rule_overrides or {}).get(key) or active_rules(data_dir, key)
+            for key in self.sources
+        }
+        self.failure_ids: list[str] = []
+        self.processed_documents = 0
+        self.incomplete_documents = 0
+        self.detail_limit = detail_limit
+        self.detail_attempts = 0
 
     def close(self) -> None:
         self.repo.close()
@@ -85,9 +97,13 @@ class Collector:
         task_id = self.repo.create_task(request)
         return self.resume(task_id)
 
-    def resume(self, task_id: str) -> OperationResponse:
+    def resume(self, task_id: str, *, bounded_source: str | None = None) -> OperationResponse:
         task = self.repo.task(task_id)
         request = TaskRequest.model_validate_json(task["request_json"])
+        if bounded_source:
+            request = request.model_copy(
+                update={"source_ids": [bounded_source], "max_pages": 1, "max_documents": 2}
+            )
         if task["cancel_requested"]:
             return OperationResponse(operation="collect", task_id=task_id, status="CANCELLED")
         self.repo.set_task_state(task_id, "RUNNING")
@@ -119,8 +135,8 @@ class Collector:
                             config.allowed_hosts, settings=self.settings.network, proxy=self.proxy
                         )
                     )
+                    adapter: MofAdapter | ChinataxAdapter | None = None
                     try:
-                        adapter: MofAdapter | ChinataxAdapter
                         if source_id == "mof":
                             assert isinstance(client, BoundedClient)
                             adapter = MofAdapter(config, client)
@@ -161,6 +177,12 @@ class Collector:
                                 client,
                                 timeout_seconds=self.settings.browser.timeout_seconds,
                             )
+                        adapter.rules = self.rules[source_id]
+                        self.repo.audit(
+                            task_id,
+                            "rule_version",
+                            {"source_id": source_id, "version": adapter.rules.version},
+                        )
                         try:
                             self._run_source(
                                 task_id,
@@ -180,15 +202,15 @@ class Collector:
                         if isinstance(exc, BudgetReached):
                             warnings.append(f"{source_id}: {exc}")
                             continue
-                        category = (
-                            "ACCESS_RESTRICTED"
-                            if isinstance(exc, AccessBlocked)
-                            else "BUDGET_REACHED"
-                            if isinstance(exc, BudgetReached)
-                            else "UNKNOWN"
-                        )
-                        failure_id = self.repo.add_failure(
-                            task_id, source_id, category, {"error": str(exc)}
+                        snapshot = getattr(adapter, "last_response", None)
+                        evidence_id = None
+                        if snapshot and isinstance(exc, StructureDrift):
+                            raw, url, media, _page_number = snapshot
+                            evidence = self.evidence.save(raw, url, url, media)
+                            self.repo.save_evidence(evidence)
+                            evidence_id = evidence.evidence_id
+                        failure_id = self._failure(
+                            task_id, source_id, exc, "discover", evidence_id=evidence_id
                         )
                         warnings.append(f"{source_id}: {exc}（failure_id={failure_id}）")
                     finally:
@@ -226,6 +248,9 @@ class Collector:
             status=state,
             data={
                 "pending_decisions": pending,
+                "failure_ids": self.failure_ids,
+                "processed_documents": self.processed_documents,
+                "incomplete_documents": self.incomplete_documents,
                 "sources": [
                     {
                         "source_id": row["source_id"],
@@ -238,6 +263,29 @@ class Collector:
             },
             warnings=warnings,
         )
+
+    def _failure(self, task_id, source_id, exc, stage, *, evidence_id=None, ref=None):
+        run = self.repo.source_run(task_id, source_id)
+        category = (
+            "ACCESS_RESTRICTED"
+            if isinstance(exc, AccessBlocked)
+            else "STRUCTURE_DRIFT"
+            if isinstance(exc, StructureDrift)
+            else "UNKNOWN"
+        )
+        details = {
+            "stage": stage,
+            "page": run["next_page"],
+            "evidence_id": evidence_id,
+            "rule_version": self.rules[source_id].version,
+            "response": {"sha256": evidence_id},
+            "expected": "列表含标题/官方链接/日期出处且分页前进；正文与标题可靠定位",
+            "error_type": type(exc).__name__,
+            "ref": ref.model_dump(mode="json") if ref else None,
+        }
+        failure_id = self.repo.add_failure(task_id, source_id, category, details)
+        self.failure_ids.append(failure_id)
+        return failure_id
 
     def _budget(self, started: float, request: TaskRequest, row, check_pages: bool = True) -> None:
         base = self._budget_baseline[str(row["source_id"])]
@@ -269,6 +317,11 @@ class Collector:
         run = self.repo.source_run(task_id, source_id)
         while not run["discovery_done"]:
             self._process_refs(task_id, request, source_id, config, client, page, started, warnings)
+            if self.repo.db.execute(
+                "SELECT 1 FROM discovered WHERE task_id=? AND source_id=? AND state='FAILED'",
+                (task_id, source_id),
+            ).fetchone():
+                raise BudgetReached("来源因条目失败停止，请先诊断")
             run = self.repo.source_run(task_id, source_id)
             self._budget(started, request, run)
             stop = self.repo.task(task_id)
@@ -279,8 +332,10 @@ class Collector:
             page_number = int(run["next_page"])
             refs, next_page, raw, media_type = adapter.discover(page_number)
             page_hash = digest(raw)
+            if next_page is not None and next_page != page_number + 1:
+                raise StructureDrift("分页必须向下一页前进")
             if page_hash in seen_pages:
-                raise ValueError("列表页内容重复，停止分页")
+                raise StructureDrift("列表页内容重复，停止分页")
             seen_pages.add(page_hash)
             listing_url = adapter.list_url if isinstance(adapter, ChinataxAdapter) else config.entry
             assert listing_url is not None
@@ -327,7 +382,11 @@ class Collector:
             ):
                 self.repo.set_ref_state(task_id, source_id, ref.url, "OUT_OF_SCOPE")
                 continue
+            evidence = None
             try:
+                if self.detail_limit is not None and self.detail_attempts >= self.detail_limit:
+                    raise BudgetReached("达到有界验证的详情请求上限")
+                self.detail_attempts += 1
                 check_url(ref.url, config.allowed_hosts, self.proxy)
                 raw, final_url, media_type = client.get(ref.url)
                 check_url(final_url, config.allowed_hosts, self.proxy)
@@ -337,7 +396,11 @@ class Collector:
                     raise BudgetReached("正文超过剩余下载预算，请续跑或调整运行预算")
                 evidence = self.evidence.save(raw, ref.url, final_url, media_type)
                 self.repo.save_evidence(evidence)
-                record = parse_detail(ref, raw, evidence.evidence_id)
+                record = parse_detail(ref, raw, evidence.evidence_id, self.rules[source_id])
+                if self.rules[source_id].version != Rules(source_id=source_id).version:
+                    record.parser_version += ":" + self.rules[source_id].version
+                if not record.body_text or not record.title:
+                    raise StructureDrift("正文或标题区域未可靠定位")
                 remaining_bytes = self.settings.collection.max_bytes_per_source - (
                     run["bytes_count"] - self._budget_baseline[source_id]["bytes_count"] + len(raw)
                 )
@@ -370,6 +433,8 @@ class Collector:
                 if not record.title or not record.body_text:
                     record.limitations.append("标题或正文缺失")
                 record.quality_state = "quarantined" if record.limitations else "collected"
+                self.processed_documents += 1
+                self.incomplete_documents += bool(record.limitations)
                 record_id, created = self.repo.add_document(task_id, record)
                 if created and not record.limitations:
                     input_digest = digest(record.model_dump_json().encode())
@@ -398,12 +463,16 @@ class Collector:
                 raise
             except (AccessBlocked, ValueError, RuntimeError) as exc:
                 self.repo.set_ref_state(task_id, source_id, ref.url, "FAILED", str(exc))
-                failure_id = self.repo.add_failure(
+                failure_id = self._failure(
                     task_id,
                     source_id,
-                    "ACCESS_RESTRICTED" if isinstance(exc, AccessBlocked) else "UNKNOWN",
-                    {"url": ref.url, "error": str(exc)},
+                    exc,
+                    "detail",
+                    evidence_id=evidence.evidence_id if evidence else None,
+                    ref=ref,
                 )
+                warnings.append(f"来源停止，failure_id={failure_id}")
+                break
                 warnings.append(f"{ref.url}: {exc}（failure_id={failure_id}）")
 
     def _attachments(
@@ -452,6 +521,8 @@ class Collector:
                 )
                 attachment.extraction_state = "failed"
                 warnings.append(f"附件 {attachment.url}: {exc}")
+                if isinstance(exc, AccessBlocked):
+                    raise
         if any(att.download_state != "saved" for att in record.attachments):
             record.limitations.append("部分附件未保存")
         if any(

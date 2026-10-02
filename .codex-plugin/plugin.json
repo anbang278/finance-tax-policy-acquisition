@@ -11,6 +11,6 @@
     "developerName": "Anbang",
     "category": "Productivity",
     "capabilities": ["Interactive", "Read"],
-    "defaultPrompt": ["采集过去一年财政部与税务总局公开的财税资料"]
+    "defaultPrompt": ["帮我准备采集环境，并询问需要采集的来源和日期范围"]
   }
 }

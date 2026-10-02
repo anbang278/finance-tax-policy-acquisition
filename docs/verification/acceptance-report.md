@@ -80,3 +80,25 @@
 环境与待验收入口见 [environment-report](environment-report.md)，操作入口见 [installation](../guides/installation.md)、[configuration](../guides/configuration.md)、[usage](../guides/usage.md)、[operations](../guides/operations.md)；当前为本机可验证交付，不提升为正式权限隔离或生产验收通过。
 
 最终文档核验：18 份项目/工程说明中的 42 条内部链接及 frontmatter 依赖均可解析，代码块闭合；17 个配置字段在模型、模板与参数表一致；三平台工作流结构有效。修改文件格式检查及两层 Git diff --check 通过。原有 test_proxy_and_status.py 保持原文，既有全库格式问题未借本轮改写。
+
+## 伙伴开箱使用与受限规则闭环（2026-10-02）
+
+本轮工程实现与本机回归 **PASS**；伙伴实机/宿主/真实源站验收 **PARTIAL**。本轮不执行真实政策采集、宿主插件安装、Git 提交/推送或常驻业务部署。所有网络采集测试均使用受控替身，工作台进程测试使用隔离数据库并在结束后停止。
+
+| 验收面 | 结果 | 实际证据与边界 |
+|---|---|---|
+| 覆盖与环境说明 | PASS（文档） | README/安装指南提供两来源、直接附件、日期口径与桌面/Linux 环境矩阵；明确完整覆盖、源站准入和附件可读性的限制 |
+| 环境引导 | PASS（本机测试） | setup Skill、macOS shell、Windows PowerShell 入口；6 项引导测试通过，覆盖已有配置保护、指定配置缺失/非法、仅财政部/工作台、Chromium 缺失及安装失败/启动、中文空格路径、重复运行、缺 uv 的哈希拒绝、固定项目虚拟环境。下载/命令部分使用替身，未在新设备真实下载完整环境 |
+| 规则闭环 | PASS（受控故障） | 21 项规则测试通过；财政部/税务列表与正文故障恢复，历史契约样本、固定门禁、两轮预算、报告/规则篡改拒绝、跨主机和无限分页拒绝、暂停停止、网络最多两次重试、自动启用续跑、失败回退、中断恢复、备份迁移、重复版本详情请求限额。包内样本为既有解析回归与补充契约数据，不冒充真实历史原件 |
+| 权限与质量边界 | PASS（代码及测试） | 规则只表达固定选择器/字段/分页；不执行候选 Python，不修改来源主机/Cookie/依赖/质量状态/可信测试。真实验证入口使用临时数据，最多一页、两次详情及 120 秒检查点预算；报告绑定执行器/契约/配置哈希且 15 分钟有效，首次续跑受同样上限约束 |
+| 工作台生命周期 | PASS（本机真实进程） | 2 项测试验证缺库不初始化、端口冲突、真实子进程启动与健康检查、复用、身份不匹配拒绝、浏览器打开失败仍有 URL、停止与 SQLite 字节不变。独立 wheel 环境另验证启动/状态/停止 |
+| 完整自动测试 | PASS（macOS） | `FTR_WEB_BROWSER=1 uv run --frozen --no-sync --extra dev --extra web pytest -q`：120 项通过，含 Chromium 页面回归；最后环境脚本变更后额外定向执行 6 项 setup 测试通过 |
+| 静态与格式 | PASS | ruff check 源码/测试/脚本通过；mypy 指定忽略第三方缺失声明口径覆盖 22 个源文件通过；本轮 16 个 Python 文件格式检查通过；shell `sh -n` 通过，git diff --check 通过。既有未改动测试不批量格式化 |
+| 构建与独立安装 | PASS（macOS） | sdist/wheel 构建；临时独立 venv 从源码目录外验证 config/doctor/schema、包内规则样本、模板、HTML/CSS/JS、主要只读 API 及工作台启动/状态/停止 |
+| 双宿主清单与 Skill | PASS（静态） / PARTIAL（模型） | 两个清单可解析、七份 SKILL.md 存在；Controller 接 setup/repair/workbench。未安装宿主或执行模型会话，不计自然语言全链路通过 |
+| Windows / Linux 与 CI | PARTIAL（本轮） | 三平台 CI 继续保留，新增 Windows PowerShell 语法检查。2026-10-01 旧基线远程 CI 通过；本轮未推送，未执行新远程 CI/Windows 真机/Xvfb 实采 |
+| 真实源站与伙伴验收 | 未执行 | 未进行两个来源的真实小范围采集；macOS/Windows × Codex/Hermes 四组合的新环境与模型调用待单独授权/设备条件具备后验收 |
+
+本轮无数据库 schema 变更；旧任务、备份与默认数据目录兼容。内置规则保留原 parser_version 去重口径，活动自修复规则追加版本哈希。备份包含 rules 制品/报告和数据库审计；旧备份无 rules 时使用内置规则。正式 Python 治理仍 BLOCKED，不能提升为生产验收或全国政策覆盖证明。
+
+使用入口：[安装](../guides/installation.md)、[工作台与 CLI](../guides/usage.md)、[规则自修复](../guides/self-repair.md)。

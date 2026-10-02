@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import re
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 
@@ -8,7 +7,6 @@ from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
-from ftr.adapters.common import parse_date
 from ftr.config import SourceConfig
 from ftr.models import DiscoveredRef
 from ftr.network import AccessBlocked, BrowserSessionClient, check_url
@@ -35,6 +33,10 @@ class ChinataxAdapter:
         self.code_id = ""
         self.page_size = 10
         self.timeout_ms = timeout_seconds * 1000
+        from ftr.rules import Rules
+
+        self.rules = Rules(source_id="chinatax")
+        self.last_response: tuple[bytes, str, str, int] | None = None
 
     @staticmethod
     def normalize_link(url: str) -> str:
@@ -100,39 +102,10 @@ class ChinataxAdapter:
         )
         if final_url != self.list_url:
             raise AccessBlocked("税务列表接口发生非预期跳转")
-        try:
-            payload = json.loads(raw)
-            data = payload["results"]["data"]
-        except (ValueError, KeyError, TypeError) as exc:
-            raise ValueError("税务列表响应不是预期 JSON") from exc
-        if payload.get("code") != 200 or not isinstance(data.get("results"), list):
-            raise ValueError("税务列表响应结构异常")
-        if data.get("channelId") and data["channelId"] != self.channel_id:
-            raise ValueError("税务列表栏目参数与请求不一致")
-        if int(data.get("page", page_number)) != page_number:
-            raise ValueError("税务列表页码与请求不一致")
-        refs = []
-        for item in data["results"]:
-            metadata = {
-                part.get("key"): part.get("value")
-                for group in item.get("domainMetaList", [])
-                for part in group.get("resultList", [])
-            }
-            refs.append(
-                DiscoveredRef(
-                    source_id=self.source_id,
-                    url=self.normalize_link(item.get("url", "")),
-                    listing_title=item.get("titleHtml") or item.get("title") or "",
-                    listing_date=parse_date(metadata.get("writtendate")),
-                    listing_date_kind="issued_date",
-                    document_number_hint=metadata.get("writtentext"),
-                    source_type_hint=metadata.get("typename"),
-                    discovered_from=self.config.entry,
-                )
-            )
-        next_page = (
-            page_number + 1
-            if page_number * int(data.get("rows", self.page_size)) < int(data.get("total", 0))
-            else None
+        self.last_response = (raw, final_url, media_type, page_number)
+        from ftr.rules import extract_listing
+
+        refs, next_page = extract_listing(
+            self.rules, raw, self.config.entry, page_number, self.page_size
         )
         return refs, next_page, raw, media_type

@@ -31,7 +31,7 @@ with tempfile.TemporaryDirectory(prefix="ftr-wheel-") as temporary:
         FTR_DATA_DIR=str(root / "资料库 #"),
         FTR_NETWORK__PROXY_MODE="direct",
     )
-    for arguments in (["config", "validate"], ["doctor"]):
+    for arguments in (["config", "validate"], ["doctor"], ["schema"]):
         result = subprocess.run(
             [str(python), "-m", "ftr.cli", *arguments],
             cwd=root,
@@ -54,6 +54,11 @@ settings = load_settings()
 repo = Repository(settings.data_dir)
 repo.close()
 assert (files("ftr") / "data" / "ftr.example.yaml").is_file()
+assert (files("ftr") / "data" / "rule-fixtures.json").is_file()
+from ftr.rules import Rules, extract_listing
+import json
+for sample in json.loads((files("ftr") / "data" / "rule-fixtures.json").read_text()):
+    assert extract_listing(Rules(source_id=sample["source_id"]), sample["listing"].encode(), sample["url"], 1)[0]
 async def verify():
     app = create_app(settings.data_dir, WebSettings(host="0.0.0.0"))
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://192.168.1.20") as client:
@@ -61,6 +66,12 @@ async def verify():
             result = await client.get(path)
             assert result.status_code == 200, (path, result.status_code)
 asyncio.run(verify())
+from ftr.workbench import manage
+try:
+    assert manage(settings.data_dir, "start")["state"] == "RUNNING"
+    assert manage(settings.data_dir, "status")["state"] == "RUNNING"
+finally:
+    manage(settings.data_dir, "stop")
 print("独立 wheel、打包配置模板、静态资源和只读 API：PASS")
 """
     subprocess.run([str(python), "-c", code], cwd=root, env=env, check=True)

@@ -38,6 +38,11 @@ def parser() -> argparse.ArgumentParser:
     serve = commands.add_parser("serve", help="启动只读政策工作台")
     serve.add_argument("--host")
     serve.add_argument("--port", type=int)
+    workbench = commands.add_parser("workbench").add_subparsers(dest="action", required=True)
+    for action in ("start", "status", "stop"):
+        command = workbench.add_parser(action)
+        if action == "start":
+            command.add_argument("--open", action="store_true")
     collect = commands.add_parser("collect")
     collect.add_argument("--request", type=Path)
     collect.add_argument("--sources", nargs="+", choices=["mof", "chinatax"])
@@ -70,6 +75,17 @@ def parser() -> argparse.ArgumentParser:
     item.add_argument("--failure", required=True)
     item.add_argument("--patch", required=True, type=Path)
     repair.add_parser("test").add_argument("--candidate", required=True)
+    repair.add_parser("context").add_argument("--failure", required=True)
+    rule = repair.add_parser("propose-rule")
+    rule.add_argument("--failure", required=True)
+    rule.add_argument("--file", type=Path, required=True)
+    rule = repair.add_parser("test-rule")
+    rule.add_argument("--candidate", required=True)
+    rule.add_argument("--live", action="store_true", help="原任务范围内真实来源验证；需采集授权")
+    repair.add_parser("activate-rule").add_argument("--candidate", required=True)
+    repair.add_parser("rollback-rule").add_argument(
+        "--source", choices=["mof", "chinatax"], required=True
+    )
     candidate = commands.add_parser("candidate").add_subparsers(dest="action", required=True)
     candidate.add_parser("report").add_argument("--candidate", required=True)
     research = commands.add_parser("research").add_subparsers(dest="action", required=True)
@@ -129,6 +145,15 @@ def run(args: argparse.Namespace) -> OperationResponse:
         )
         return OperationResponse(
             operation=f"backup {args.action}", status="COMPLETED", data=backup_result
+        )
+    if args.command == "workbench":
+        from ftr.workbench import manage
+
+        result = manage(
+            root, args.action, open_browser=getattr(args, "open", False), web_settings=settings.web
+        )
+        return OperationResponse(
+            operation=f"workbench {args.action}", status=result["state"], data=result
         )
     if args.command == "serve":
         try:
@@ -205,6 +230,9 @@ def run(args: argparse.Namespace) -> OperationResponse:
                 "task_request": TaskRequest.model_json_schema(),
                 "semantic_decision": SemanticDecision.model_json_schema(),
                 "research_draft": ResearchDraft.model_json_schema(),
+                "extraction_rules": __import__(
+                    "ftr.rules", fromlist=["Rules"]
+                ).Rules.model_json_schema(),
             },
         )
     if args.command == "task" and args.action == "status":
@@ -263,6 +291,12 @@ def run(args: argparse.Namespace) -> OperationResponse:
     with data_lock(root):
         repo = Repository(root)
         try:
+            if args.command in ("collect", "task") or (
+                args.command == "repair" and args.action != "context"
+            ):
+                from ftr.rule_repair import recover
+
+                recover(root, repo)
             if args.command == "collect":
                 assert request is not None
                 collector = Collector(root, settings, proxy=effective_proxy)
@@ -321,6 +355,40 @@ def run(args: argparse.Namespace) -> OperationResponse:
                     data={"evidence": evidence.model_dump(mode="json")},
                 )
             if args.command == "repair":
+                from ftr.rule_repair import (
+                    activate,
+                    failure_context,
+                    rollback,
+                    submit,
+                    test_candidate,
+                )
+
+                if args.action == "context":
+                    return OperationResponse(
+                        operation="repair context",
+                        status="COMPLETED",
+                        data=failure_context(repo, args.failure),
+                    )
+                if args.action == "propose-rule":
+                    result = submit(root, repo, args.failure, args.file)
+                    return OperationResponse(
+                        operation="repair propose-rule", status=result["state"], data=result
+                    )
+                if args.action == "test-rule":
+                    result = test_candidate(root, repo, args.candidate, settings, live=args.live)
+                    return OperationResponse(
+                        operation="repair test-rule", status=result["state"], data=result
+                    )
+                if args.action == "activate-rule":
+                    result = activate(root, repo, args.candidate, settings)
+                    return OperationResponse(
+                        operation="repair activate-rule", status=result["state"], data=result
+                    )
+                if args.action == "rollback-rule":
+                    result = rollback(root, repo, args.source)
+                    return OperationResponse(
+                        operation="repair rollback-rule", status=result["state"], data=result
+                    )
                 if args.action == "test":
                     return OperationResponse(
                         operation="repair test",

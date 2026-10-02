@@ -4,7 +4,7 @@
 
 | 范围 | 对应产物 | 当前状态 |
 |---|---|---|
-| U01—U03、U06—U07 | 独立工程、五个 Skill、`ftr` 协议、`TaskRequest`、双清单、研发四件套 | 已实现骨架；宿主实装待验收 |
+| U01—U03、U06—U07 | 独立工程、七个 Skill、`ftr` 协议、`TaskRequest`、双清单、研发四件套 | 已实现骨架；宿主实装待验收 |
 | U04、P01—P16 | `DESIGN_CONSTITUTION.md`、`ARCHITECTURE.md`、`docs/development/design.md`、受保护路径门禁 | 文档和部分程序门禁已实现 |
 | U05 | `repair.py` 与 Level 4 接口设计 | 首版候选阶段；隔离测试、签名发布延期 |
 | T00—T03 | 环境勘察、模型、SQLite、证据仓、网络边界、备份 | 本地实现；异常及大规模恢复覆盖不足 |
@@ -33,3 +33,13 @@ A05 按本轮确认改为“错误内容或错误分类不得通过”；合法�
 | Windows 原生与迁移 | Portalocker、备份规范路径与 URI、verify_wheel、三平台 CI | Windows/Linux 实际执行待验证 |
 | Linux 无桌面税务采集 | 惰性 Chromium、显示检查、Xvfb 手册 | 参数与缺环境测试通过，Linux 源站实采待验证 |
 | 无认证局域网工作台 | serve host、Host 校验、ui-config、同源页面 | 本机监听/只读验证，另一台电脑待验收 |
+
+## 伙伴开箱使用与受限规则闭环（2026-10-02）
+
+本轮在原两来源范围内新增 setup、workbench Skill；用户级环境引导返回绝对运行路径，按来源/查询能力安装依赖，不触发采集。只读工作台新增启动、复用、身份验证停止及自动打开浏览器接口。
+
+受限规则自修复使用固定执行器与可信样本，支持列表/正文定位、预定义日期、分页和 JSON 字段映射；失败原件绑定候选及验证报告，最多两轮候选。有界真实来源验证通过后自动本机启用并续跑，失败及中断回退；不执行未知 Python，不更改资料复核门槛，governed 仍未开放。详见 ../guides/self-repair.md 与当前架构。
+
+追踪入口：setup → scripts/setup.sh、setup.ps1、setup_runtime.py → tests/test_setup.py；规则闭环 → rules.py、rule_repair.py、runtime.py → tests/test_rule_repair.py；工作台 → workbench.py → tests/test_workbench_lifecycle.py。既有回归、wheel 与三平台 CI 继续执行。
+
+验收须分开记录离线故障注入、真实源站及 macOS/Windows × Codex/Hermes 会话。受控网络替身不代表真实访问成功，缺宿主/设备不能计通过。当前实现结果以 acceptance-report.md 本轮补充为准。

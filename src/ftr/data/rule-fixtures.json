@@ -1,0 +1,46 @@
+[
+  {
+    "source_id": "mof",
+    "url": "https://www.mof.gov.cn/zhengwuxinxi/zhengcefabu/",
+    "listing": "<ul><li><a href='https://kjs.mof.gov.cn/zhengcefabu/202609/t20260901_123.htm'>财政文件</a><span>2026-09-01</span></li></ul><script>var countPage = 2</script>",
+    "detail": "<h2>财政文件</h2><div class='TRS_Editor'><p>第一条 可信样本正文。</p></div>",
+    "title": "财政文件",
+    "body": "第一条 可信样本正文。",
+    "date": "2026-09-01",
+    "next_page": 2,
+    "origin": "研发固定契约样本（非真实源站原件）"
+  },
+  {
+    "source_id": "chinatax",
+    "url": "https://fgk.chinatax.gov.cn/zcfgk/c100006/listflfg.html",
+    "listing": "{\"code\":200,\"results\":{\"data\":{\"page\":1,\"rows\":10,\"total\":11,\"results\":[{\"url\":\"https://fgk.chinatax.gov.cn/zcfgk/c100012/c123/content.html\",\"title\":\"税务通知\",\"domainMetaList\":[{\"resultList\":[{\"key\":\"writtendate\",\"value\":\"2026-09-01\"}]}]}]}}}",
+    "detail": "<div class='detials'><h3>税务通知</h3><div class='arctips'>现行有效 成文日期：2026-09-01</div><div class='arc_cont'><p>第一条 可信税务正文。</p></div></div>",
+    "title": "税务通知",
+    "body": "第一条 可信税务正文。",
+    "date": "2026-09-01",
+    "next_page": 2,
+    "origin": "研发固定契约样本（非真实源站原件）"
+  },
+  {
+    "source_id": "mof",
+    "url": "https://www.mof.gov.cn/zhengwuxinxi/zhengcefabu/",
+    "listing": "<ul><li><a href=\"http://kjs.mof.gov.cn/zhengcefabu/202608/t20260805_3994927.htm\">Policy</a><span>2026-08-05</span></li></ul><script>var countPage = 2</script>",
+    "detail": "<h2>关于印发某准则的通知</h2><div class=\"TRS_Editor\"><style>.TRS_Editor P{color:red}</style><p>第一条 正文。</p><p>第二条 保留多段内容。</p></div>",
+    "title": "关于印发某准则的通知",
+    "body": "第一条 正文。 第二条 保留多段内容。",
+    "date": "2026-08-05",
+    "next_page": 2,
+    "origin": "tests/test_core.py 财政部列表及样式过滤回归基线，补充多段契约"
+  },
+  {
+    "source_id": "chinatax",
+    "url": "https://fgk.chinatax.gov.cn/zcfgk/c100006/listflfg.html",
+    "listing": "{\"code\":200,\"results\":{\"data\":{\"page\":1,\"rows\":10,\"total\":11,\"results\":[{\"url\":\"https://www.chinatax.gov.cn/zcfgk/c100012/content.html\",\"title\":\"税务文件\",\"domainMetaList\":[{\"resultList\":[{\"key\":\"writtendate\",\"value\":\"2026-09-01\"}]}]}]}}}",
+    "detail": "<div class='detials contentLeft'><h3>税务公告</h3><div class='arctips'>字体：【大】【中】【小】 尚未生效 成文日期：2026-09-04</div><div class='article'><div class='arc_cont'><p>公告正文。</p><a href='files/form.xls'>申报表</a></div></div></div>",
+    "title": "税务公告",
+    "body": "公告正文。 申报表",
+    "date": "2026-09-01",
+    "next_page": 2,
+    "origin": "tests/test_core.py FakeTaxClient 与 test_tax_detail_excludes_toolbar_and_marks_main_attachments 回归基线"
+  }
+]

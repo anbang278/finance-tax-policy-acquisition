@@ -2,7 +2,7 @@
 
 ## 资产位置
 
-工程与插件统一位于仓库根目录。本页记录当前研发设计；原始交接文档保留在 `docs/history/`。`src/ftr/` 运行确定性代码，`skills/` 是五个宿主共享 Skill，`config/sources.yaml` 为精确来源清单，`contracts/` 描述接受的资料类型。Codex 使用 `.codex-plugin/plugin.json`，Hermes 使用根目录 `plugin.json`。
+工程与插件统一位于仓库根目录。本页记录当前研发设计；原始交接文档保留在 `docs/history/`。`src/ftr/` 运行确定性代码，`skills/` 是七个宿主共享 Skill，`config/sources.yaml` 为精确来源清单，`contracts/` 描述接受的资料类型。Codex 使用 `.codex-plugin/plugin.json`，Hermes 使用根目录 `plugin.json`。
 
 ## 数据与调用
 
@@ -18,7 +18,7 @@
 
 ## 修复与治理
 
-首版只保存已解释的 unified diff 补丁，并按故障来源限制路径。候选 manifest 固定记载 `BLOCKED_NO_ISOLATION`；无自动执行、无可信回归、无正式发布。未来 Level 4 的接口按“候选摘要—可信测试报告—人工签名收据—发布账本”扩展，但本期没有可绕过的空实现。
+Python 补丁保存已解释的 unified diff 并按来源限制路径，仍固定 `BLOCKED_NO_ISOLATION`。受限规则闭环按 2026-10-02 扩展支持固定门禁验证、自动本机启用和回退。未来 Level 4 的接口按“候选摘要—可信测试报告—人工签名收据—发布账本”扩展，但本期没有可绕过的空实现。
 
 ## ADR
 
@@ -26,7 +26,7 @@
 - ADR-002：税务站由有界面 Playwright 建立正常会话，再以 `requests` 复用浏览器实际取得的参数和 Cookie；HTTP 403 不通过代理或伪造身份处理。
 - ADR-003：栏目全类型保存，按类型复核；研究引用优先原文。
 - ADR-004：旧版办公附件保存原件，内容未解析时不声称完整。
-- ADR-005：缺少隔离环境时修复流程停止于候选阶段。
+- ADR-005：未知 Python 候选缺少隔离环境时停止；固定语言的规则按门禁本机启用。
 
 ## 本机政策工作台（2026-09-30）
 
@@ -56,3 +56,13 @@ Web 默认回环监听，显式非回环监听时允许局域网 Host；不增�
 - ADR-008：团队局域网访问按本轮明确要求不增加认证；默认本机监听继续适用于独立使用。
 
 操作入口和字段定义见 [configuration](../guides/configuration.md)、[installation](../guides/installation.md)、[usage](../guides/usage.md)、[operations](../guides/operations.md)，验证边界见 [environment-report](../verification/environment-report.md)。
+
+## 伙伴开箱使用与受限规则闭环（2026-10-02）
+
+本轮在原两来源范围内新增 setup、workbench Skill；用户级环境引导返回绝对运行路径，按来源/查询能力安装依赖，不触发采集。只读工作台新增启动、复用、身份验证停止及自动打开浏览器接口。
+
+受限规则自修复使用固定执行器与可信样本，支持列表/正文定位、预定义日期、分页和 JSON 字段映射；失败原件绑定候选及验证报告，最多两轮候选。有界真实来源验证通过后自动本机启用并续跑，失败及中断回退；不执行未知 Python，不更改资料复核门槛，governed 仍未开放。详见 ../guides/self-repair.md 与当前架构。
+
+追踪入口：setup → scripts/setup.sh、setup.ps1、setup_runtime.py → tests/test_setup.py；规则闭环 → rules.py、rule_repair.py、runtime.py → tests/test_rule_repair.py；工作台 → workbench.py → tests/test_workbench_lifecycle.py。既有回归、wheel 与三平台 CI 继续执行。
+
+验收须分开记录离线故障注入、真实源站及 macOS/Windows × Codex/Hermes 会话。受控网络替身不代表真实访问成功，缺宿主/设备不能计通过。当前实现结果以 acceptance-report.md 本轮补充为准。

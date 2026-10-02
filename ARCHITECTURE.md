@@ -1,10 +1,14 @@
 # 架构与运行状态
 
-一份 Python 包、五个 Skill、两个宿主清单。`config/sources.yaml` 为来源信任表，`contracts/official-material.yaml` 为采集意图契约。`ftr` 提供 JSON CLI，原始资料按 SHA-256 写入 `FTR_DATA_DIR/evidence`，任务和版本存于 SQLite。同一数据目录使用独占锁。
+一份 Python 包、七个 Skill、两个宿主清单。`config/sources.yaml` 为来源信任表，`contracts/official-material.yaml` 为采集意图契约。`ftr` 提供 JSON CLI，原始资料按 SHA-256 写入 `FTR_DATA_DIR/evidence`，任务和版本存于 SQLite。同一数据目录使用独占锁。
 
 采集：`CREATED → RUNNING → WAITING_DECISION / PARTIAL / COMPLETED / COMPLETED_EMPTY`。程序硬失败或附件不足进入隔离；新资料需要语义复核才能成为可检索的已验证版本。
 
-修复：`FAILURE → PATCH_PROPOSED → BLOCKED_NO_ISOLATION`。当前仅保存候选和静态路径审查。隔离候选执行、可信报告、独立人工收据和正式发布管理器是后续阶段，不能用本地同身份演示冒充。
+修复分两条接口：任意 Python 补丁继续 `PATCH_PROPOSED → BLOCKED_NO_ISOLATION`；受限规则由宿主生成，固定 schema/执行器、包内可信样本、失败原件和临时库有界真实来源验证后，进入 `RULE_VERIFIED → RULE_ACTIVE / RULE_ROLLED_BACK`。通过门禁后自动本机启用，不开放正式代码治理。活动规则与上一版本原子保存，probation 未完成时下一次写入操作先回退；单一 CLI 写入锁保护切换，旧库无规则时使用内置规则。详情见 [规则自修复](docs/guides/self-repair.md)。
+
+列表规则在 Adapter 内固定执行；正文的选择器由通用可信解析器执行。规则不包含 Python、网络调用、Cookie、主机或复核状态。故障留存原件及检查点，不把未知故障自动当作结构漂移。宿主负责候选生成和后续编排，CLI 不引入模型 API 或后台调度。
+
+环境引导使用平台原生入口先检测 uv/Python，再补齐用户级环境。setup 与 Controller/workbench 共享返回的绝对 Python 与配置路径。工作台 lifecycle 默认回环、复用已健康服务、十端口尝试；专属随机令牌控制通道核对资料目录和进程身份后停止服务，不按猜测 PID 杀进程。
 
 财政部 Adapter 使用 HTTP 与静态列表。税务 Adapter 先由有界面 Playwright 正常打开栏目，读取页面实际成功请求中的 `channelId`、页容量及当前会话 Cookie；随后在同一执行批次用 `requests.Session` 获取列表分页、详情和附件。Cookie 仅驻留内存，不写入日志或数据库；列表响应作为来源证据保存。无界面浏览器在本机返回 403 时不继续请求。来源新增主机需修改信任配置，不属于自动修复。
 

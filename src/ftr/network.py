@@ -132,10 +132,15 @@ class BoundedClient:
         self._client.close()
 
     def get(self, url: str) -> tuple[bytes, str, str]:
-        try:
-            return self._get(url)
-        except httpx.HTTPError as exc:
-            raise RuntimeError(f"来源请求失败（{type(exc).__name__}）: {url}") from exc
+        for attempt in range(3):
+            try:
+                return self._get(url)
+            except httpx.TransportError as exc:
+                if attempt == 2:
+                    raise RuntimeError(f"来源请求失败（{type(exc).__name__}）") from exc
+            except httpx.HTTPError as exc:
+                raise RuntimeError(f"来源请求失败（{type(exc).__name__}）") from exc
+        raise RuntimeError("网络重试耗尽")
 
     def _get(self, url: str) -> tuple[bytes, str, str]:
         for _ in range(6):
@@ -263,8 +268,20 @@ class BrowserSessionClient:
                 return bytes(body), response.url, response.headers.get("content-type", "")
         raise AccessBlocked("重定向次数超过上限")
 
+    def _retry(self, method, url, data=None):
+        for attempt in range(3):
+            try:
+                return self._request(method, url, data)
+            except RuntimeError as exc:
+                if (
+                    not isinstance(exc.__cause__, (requests.ConnectionError, requests.Timeout))
+                    or attempt == 2
+                ):
+                    raise
+        raise RuntimeError("网络重试耗尽")
+
     def get(self, url: str) -> tuple[bytes, str, str]:
-        return self._request("GET", url)
+        return self._retry("GET", url)
 
     def post_form(self, url: str, data: dict[str, str]) -> tuple[bytes, str, str]:
-        return self._request("POST", url, data)
+        return self._retry("POST", url, data)

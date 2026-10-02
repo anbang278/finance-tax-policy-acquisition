@@ -77,6 +77,8 @@ def create_backup(data_dir: Path, destination: Path) -> dict:
             source.close()
         if (data_dir / "evidence").exists():
             shutil.copytree(data_dir / "evidence", destination / "evidence")
+        if (data_dir / "rules").exists():
+            shutil.copytree(data_dir / "rules", destination / "rules", symlinks=True)
         manifest = {"created_at": utc_now().isoformat(), "files": _files(destination)}
         (destination / "manifest.json").write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"

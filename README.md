@@ -11,7 +11,7 @@ confidence: implementation_verified_locally
 
 # 财税 AI 共创：政策获取子模块
 
-本项目从财政部政策发布和国家税务总局政策法规库获取公开资料，保存原始证据、日期出处和资料版本；经语义复核后，供带引用的研究使用。核心是一份 Python 包，既可从 CLI 运行，也可由 Codex/Hermes 的五个 Skill 调用；工作台用于只读查询与任务观察。
+本项目从财政部政策发布和国家税务总局政策法规库获取公开资料，保存原始证据、日期出处和资料版本；经语义复核后，供带引用的研究使用。核心是一份 Python 包，既可从 CLI 运行，也可由 Codex/Hermes 的七个 Skill 调用；工作台用于只读查询与任务观察。
 
 ## 按角色开始
 
@@ -19,7 +19,25 @@ confidence: implementation_verified_locally
 - **开发者**：从根目录运行 `uv sync --frozen --extra dev --extra web`；阅读[开发说明](docs/development/development.md)、[架构](ARCHITECTURE.md)和[回归要求](tests/REGRESSION.md)。
 - **Agent**：先读本页、[当前需求基线](docs/development/prd.md)、[验收记录](docs/verification/acceptance-report.md)和[Agent 契约](AGENTS.md)，再按任务阅读相关专题。`CONTRIBUTING.md` 提供贡献入口。
 
+
+## 覆盖范围与环境要求
+
+| 使用范围 | 实际覆盖与日期语义 | 本机环境要求 |
+|---|---|---|
+| 财政部 `mof` | 仅“政策发布”栏目直接条目及直接附件；默认日期为栏目日期 | uv、Python 3.13、锁定核心依赖；HTTP 采集无需 Chromium |
+| 税务总局 `chinatax` | 仅登记的政策法规库栏目直接条目及直接附件；默认日期为成文日期 | 核心环境、Chromium、可用显示环境；浏览器会话与本机网络出口须源站接受 |
+| 本机查询工作台 | 已保存资料、任务、版本和原件；不代表官网实时状态 | 核心环境与 Web extra；无需 Chromium、无需政策源站网络 |
+| Linux 无桌面税务 | 与税务栏目范围相同；源站准入需实测 | Chromium 系统库、Xvfb/xauth；管理员系统安装由部署者完成，本轮桌面验收不含此场景 |
+
+当前两个入口不等于全国官方财税法规政策全集，不覆盖地方政策、其他官方机构或递归关联页面。两来源均支持指定起止日期、历史回填和断点续跑，但不能把有限预算、14 天增量回看或 CI 测试称为完整历史覆盖证明。
+
+HTML 和文本 PDF 可提取；Word、Excel、扫描件仅保留原件并显示限制。附件下载成功不代表正文可供研究；未复核资料默认不进入研究检索。成文、发布、施行日期与法律效力需分别判断，缺失日期不猜补。
+
 ## 快速启动
+
+非技术伙伴可让宿主加载 `setup`，或在完整插件目录运行：macOS `sh scripts/setup.sh all`；Windows PowerShell `& .\scripts\setup.ps1 -Capability all`。入口补装用户级环境并返回绝对 Python/配置路径，不访问源站。仅财政部选择 mof，仅查询选择 workbench。后续用返回的 Python 加 `-m ftr.cli --config CONFIG` 调用。
+
+`workbench` Skill 或 `ftr workbench start --open` 可启动并打开只读页面；状态与停止用 `workbench status/stop`。七个 Skill 为 controller、setup、workbench、semantic-review、research、repair、change-review。自动修复的规则范围、验证和回退见[本机规则修复](docs/guides/self-repair.md)。
 
 在仓库根目录安装并检查环境：
 
@@ -39,7 +57,7 @@ uv run ftr doctor
 
 列表和原件 HTTP 成功不代表资料已经复核。资料类型包含政策文件、公告、官方解读、发布消息等；成文、发布与栏目日期分别记录，不猜测缺失日期。法律效力和企业适用性需要另外判断。
 
-资料质量状态为 `collected`、`validated`、`quarantined`、`rejected`。工作台展示各状态的最新版本；研究默认仅使用已验证资料。出现结构故障可登记补丁候选，但未知候选执行、正式审批、发布和回退仍未开放。
+资料质量状态为 `collected`、`validated`、`quarantined`、`rejected`。工作台展示各状态的最新版本；研究默认仅使用已验证资料。有证据的结构故障可由宿主生成受限规则，经可信样本与有界真实来源验证后自动本机启用、续跑及失败回退。未知 Python 补丁仍只登记，正式代码隔离、发布治理未开放。
 
 当前交付是本地可验证研发演示，不代表正式权限隔离或生产发布已完成。跨环境真实运行、Codex/Hermes 模型会话、两来源完整覆盖及跨电脑局域网访问仍需分别验收；详见[验收记录](docs/verification/acceptance-report.md)和[环境记录](docs/verification/environment-report.md)。
 
