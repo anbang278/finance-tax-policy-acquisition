@@ -13,6 +13,14 @@ confidence: implementation_verified_locally
 
 本项目从财政部政策发布和国家税务总局政策法规库获取公开资料，保存原始证据、日期出处和资料版本；经语义复核后，供带引用的研究使用。核心是一份 Python 包，既可从 CLI 运行，也可由 Codex/Hermes 的七个 Skill 调用；工作台用于只读查询与任务观察。
 
+## 最简使用：一句话开始采集
+
+将下面这句话直接发给具备本机终端和文件访问能力的 AI（如 Codex、Hermes）：
+
+```text
+请加载 https://github.com/anbang278/finance-tax-policy-acquisition ，按仓库说明完成配置，并采集【去年】至【今日】的财政部和税务总局政策，汇报结果并启动可视化界面。
+```
+
 ## 按角色开始
 
 - **使用者**：按[安装与部署](docs/guides/installation.md)获取完整项目，让 AI 调用 setup 自动准备用户级环境，再按[使用流程](docs/guides/usage.md)运行；已有配置和数据会保留。迁移与故障处理见[运维手册](docs/guides/operations.md)。
