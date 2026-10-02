@@ -6,12 +6,20 @@ import json
 import os
 import subprocess
 import tempfile
+from zipfile import ZipFile
 from pathlib import Path
 
 project = Path(__file__).resolve().parents[1]
 wheels = sorted((project / "dist").glob("*.whl"), key=lambda p: p.stat().st_mtime)
 if not wheels:
     raise SystemExit("缺少 wheel，请先运行 uv build")
+with ZipFile(wheels[-1]) as wheel:
+    metadata_name = next(
+        name for name in wheel.namelist() if name.endswith(".dist-info/METADATA")
+    )
+    metadata = wheel.read(metadata_name).decode("utf-8")
+    assert "License-Expression: Apache-2.0" in metadata
+    assert any(name.endswith(".dist-info/licenses/LICENSE") for name in wheel.namelist())
 with tempfile.TemporaryDirectory(prefix="ftr-wheel-") as temporary:
     root = Path(temporary)
     environment = root / "venv"

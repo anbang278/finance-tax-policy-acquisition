@@ -3,6 +3,8 @@ name = "finance-tax-research"
 version = "0.1.0"
 description = "财税公开资料采集与证据管理（本地演示）"
 requires-python = ">=3.13,<3.14"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 dependencies = [
     "pydantic>=2,<3",
     "httpx>=0.28,<1",
