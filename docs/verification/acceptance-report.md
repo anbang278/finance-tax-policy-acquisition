@@ -120,9 +120,12 @@
 | 静态／格式／脚本 | PASS | `ruff check src tests scripts` 通过；`mypy --ignore-missing-imports src` 覆盖 24 个源文件通过，仍使用项目指定忽略第三方缺失声明口径；16 个新增/修改 Python 文件格式检查通过；`sh -n scripts/setup.sh scripts/run.sh` 与 `git diff --check` 通过 |
 | 构建与独立安装 | PASS（macOS） | `uv build` 构建 sdist/wheel；`uv run --frozen --no-sync --extra dev --extra web python scripts/verify_wheel.py` 从源码目录外创建独立环境安装 wheel，验证新模块与参数、打包模板/规则样本、静态资源、只读 API 和工作台实例身份及启动/状态/停止 |
 | 文档与参数契约 | PASS | 当前文档相对链接、frontmatter depends_on 与代码块闭合检查通过；RuntimeSettings 与模板一致，共 22 个参数。README、操作指南、三个有关 Skill、PRD/设计/实施/测试计划/追踪矩阵同步 |
-| 三平台 CI／桌面宿主 | PARTIAL | CI 已纳入 Windows setup.ps1/run.ps1 语法与 Windows 原生入口回归；本轮未提交、推送或触发远程 CI。Windows/Linux 实际新增测试结果、干净 Windows/macOS 安装及 Codex/Hermes 真实模型调用未验收 |
+| 三平台 CI | PASS | 升级与 Linux 无桌面模拟测试修正已提交、推送；[GitHub Actions 36968262695](https://github.com/anbang278/finance-tax-policy-acquisition/actions/runs/36968262695) 在提交 `3d953b5` 上三平台全部通过。macOS：158 passed / 1 skipped；Windows：155 passed / 4 skipped；Ubuntu：157 passed / 2 skipped。包含 Chromium 页面回归、Windows PowerShell 脚本语法与原生入口、静态检查、构建和脱离源码的 wheel 验证；跳过项不计通过 |
+| 干净桌面／真实宿主 | PARTIAL | 干净 Windows/macOS 的完整首次安装、Codex/Hermes 真实模型调用仍未验收；GitHub runner 不替代伙伴桌面或 AI 宿主验收 |
 | 真实来源 | 未执行 | 未执行真实财政部/税务采集，不能宣称源站准入、全年覆盖或新重试策略在真实源站的效果已经通过 |
 
-新增五个运行参数和派生响应字段，保持 CLI 主协议、冻结 TaskRequest、默认资料目录与旧状态/备份兼容。setup 返回 Git 提交号以及运行关键文件摘要，提交号不能单独代表未提交代码。没有提交、推送、宿主插件安装、部署、业务资料状态代判或长期记忆写入。
+新增五个运行参数和派生响应字段，保持 CLI 主协议、冻结 TaskRequest、默认资料目录与旧状态/备份兼容。setup 返回 Git 提交号以及运行关键文件摘要，提交号不能单独代表未提交代码。用户追加授权后完成 Git 提交与推送；未执行宿主插件安装、部署、业务资料状态代判或长期记忆写入。
+
+GitHub 交付：功能提交 `22d9c5f`，合并远端 README 更新 `8f70c26`，测试修正 `3d953b5`。首次远程验证在 Ubuntu 无显示环境下暴露模拟浏览器测试仍使用桌面设置的问题；该测试明确设为 headless 后，24 项本机 Repair 回归与上述三平台完整 CI 均通过。生产环境显示检查和 Repair 门禁未放宽。验收记录的后续提交仅更新文档，使用 `[skip ci]` 避免重复执行相同代码的三平台流水线；上面链接是代码与测试版本的实际验证证据。
 
 遗留验收需要真实设备、宿主会话及当前任务的采集授权；本轮不将这些缺口计为通过。后续使用入口见 [安装](../guides/installation.md)、[运行参数](../guides/configuration.md)、[使用与诊断](../guides/usage.md)。
