@@ -22,3 +22,13 @@ RuntimeSettings 经显式 CLI → 环境变量 → YAML → 默认值解析，�
 Web 为同源只读服务，默认回环；显式非回环地址允许团队局域网查询与下载，不增加认证。IPv4/IPv6 分别使用对应监听 socket。/api/ui-config 仅发布页面轮询与请求超时，其他运行配置不通过 Web 暴露。CLI 固定 UTF-8 JSON 输出，现有响应结构和数据库 schema 不变。
 
 源码安装使用 uv.lock；wheel 分发内含默认来源、契约、治理材料、配置模板与静态页面。双宿主复用同一安装环境及绝对配置路径；跨机器使用备份恢复，不共享多机器写入目录。三平台 CI 与真实源站/宿主/局域网验收分别记录，详见[环境验证记录](docs/verification/environment-report.md)。
+
+## 首次配置与运行可靠性升级（2026-10-02）
+
+面向 Windows/macOS 由 AI 协助的普通用户，以原生 setup/run 为主；不交付 Docker 或特定宿主适配。用户提供来源和明确日期，环境优先复用、缺失补装，预算结束后等待用户要求续跑。
+
+自动配置隔离子进程 PYTHONHOME/PYTHONPATH、保留 Web extra；显式浏览器优先，自动候选按已有 Chromium、Edge、Chrome 顺序逐个启动验证，缺失才安装。配置不重写，报告运行入口及 Git/源码包版本证据。工作台通过令牌、目录和实例握手登记实际服务 PID，保留旧状态识别；启动失败分类且仅端口冲突换端口。
+
+网络默认三次尝试、1/2 秒基础退避加抖动；详情连续三条瞬态失败才停止，列表失败保留检查点。暂停、取消、预算和 Repair 实际请求限额约束重试。进度独立写 stderr，最终 JSON 增加停止原因、队列和续跑参数。强制中断残留只在取得独占锁后修正；查询保持只读。隔离原因由现有 limitations 派生，PDF 警告保留证据并增加内容限制，不改变旧资料状态与摘要。
+
+接口变更为 RuntimeSettings 新增五个参数、schema 增加 runtime_settings、Web 增加 quarantine_reasons/limitation_reasons/writer_activity/last_batch，无新增数据库表，不改冻结 TaskRequest。浏览器模块纳入 Repair 执行器指纹，旧验证报告需重验。实施与真实验收分别记录，详见 acceptance-report.md 本轮记录。

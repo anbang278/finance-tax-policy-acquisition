@@ -66,3 +66,13 @@ Web 默认回环监听，显式非回环监听时允许局域网 Host；不增�
 追踪入口：setup → scripts/setup.sh、setup.ps1、setup_runtime.py → tests/test_setup.py；规则闭环 → rules.py、rule_repair.py、runtime.py → tests/test_rule_repair.py；工作台 → workbench.py → tests/test_workbench_lifecycle.py。既有回归、wheel 与三平台 CI 继续执行。
 
 验收须分开记录离线故障注入、真实源站及 macOS/Windows × Codex/Hermes 会话。受控网络替身不代表真实访问成功，缺宿主/设备不能计通过。当前实现结果以 acceptance-report.md 本轮补充为准。
+
+## 首次配置与运行可靠性升级（2026-10-02）
+
+面向 Windows/macOS 由 AI 协助的普通用户，以原生 setup/run 为主；不交付 Docker 或特定宿主适配。用户提供来源和明确日期，环境优先复用、缺失补装，预算结束后等待用户要求续跑。
+
+自动配置隔离子进程 PYTHONHOME/PYTHONPATH、保留 Web extra；显式浏览器优先，自动候选按已有 Chromium、Edge、Chrome 顺序逐个启动验证，缺失才安装。配置不重写，报告运行入口及 Git/源码包版本证据。工作台通过令牌、目录和实例握手登记实际服务 PID，保留旧状态识别；启动失败分类且仅端口冲突换端口。
+
+网络默认三次尝试、1/2 秒基础退避加抖动；详情连续三条瞬态失败才停止，列表失败保留检查点。暂停、取消、预算和 Repair 实际请求限额约束重试。进度独立写 stderr，最终 JSON 增加停止原因、队列和续跑参数。强制中断残留只在取得独占锁后修正；查询保持只读。隔离原因由现有 limitations 派生，PDF 警告保留证据并增加内容限制，不改变旧资料状态与摘要。
+
+接口变更为 RuntimeSettings 新增五个参数、schema 增加 runtime_settings、Web 增加 quarantine_reasons/limitation_reasons/writer_activity/last_batch，无新增数据库表，不改冻结 TaskRequest。浏览器模块纳入 Repair 执行器指纹，旧验证报告需重验。实施与真实验收分别记录，详见 acceptance-report.md 本轮记录。

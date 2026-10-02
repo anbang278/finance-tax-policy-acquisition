@@ -45,3 +45,9 @@ Remove-Item Env:FTR_WEB_BROWSER
 - test_workbench_lifecycle.py：真实本机子进程、健康检查、端口冲突、复用、身份不匹配拒绝、停止与数据库字节不变。
 
 wheel 独立验证同时检查打包规则样本、规则解析和工作台生命周期；Windows CI 解析 PowerShell 引导脚本。四种桌面宿主组合的实机安装、模型调用和真实源站访问单独验收。
+
+## 首次配置与运行可靠性增量（2026-10-02）
+
+新增 test_reliability.py 覆盖 HTTP 故障注入、连续失败与续跑、Repair 实际请求计数、进度/信号/硬退出、工作台包装 PID 与慢启动、历史隔离原因及 PDF 警告。test_setup.py 增加污染环境和运行入口透传；三平台 CI 解析 setup.ps1/run.ps1，Windows 执行原生入口用例。独立 wheel 检查覆盖新增模块、参数与服务实例身份。
+
+完整命令及隔离边界沿用上文；本机通过不代替新远程 CI、干净桌面安装或真实源站。脚本读取 UTF-8；源码包下载、依赖下载与实际浏览器启动分别记录。

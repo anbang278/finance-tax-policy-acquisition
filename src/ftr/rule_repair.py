@@ -24,6 +24,7 @@ def executor_fingerprint():
         "rule_repair.py",
         "runtime.py",
         "network.py",
+        "browser.py",
         "adapters/common.py",
         "models.py",
         "config.py",
@@ -236,7 +237,13 @@ def _test_candidate(root, repo, candidate, settings, *, live=False):
                 records = collector.repo.db.execute(
                     "SELECT record_json FROM documents WHERE task_id=?", (task_id,)
                 ).fetchall()
-                if collector.failure_ids or not records:
+                if (
+                    collector.failure_ids
+                    or not records
+                    or {"INTERRUPTED", "PAUSE_REQUESTED", "CANCEL_REQUESTED"}.intersection(
+                        result.data.get("stop_reasons", [])
+                    )
+                ):
                     raise ValueError("真实来源验证失败或没有范围内资料；禁止启用")
                 for row in records:
                     record = json.loads(row[0])
@@ -356,6 +363,9 @@ def activate(root, repo, candidate, settings):
             or not collector.processed_documents
             or collector.incomplete_documents
             or result.status == "CANCELLED"
+            or {"INTERRUPTED", "PAUSE_REQUESTED", "CANCEL_REQUESTED"}.intersection(
+                result.data.get("stop_reasons", [])
+            )
         ):
             return rollback(root, repo, rules.source_id, "首次有界续跑失败")
         state["probation"] = False

@@ -1,7 +1,7 @@
 ---
 type: project_document
 status: active
-updated_at: 2026-09-30
+updated_at: 2026-10-02
 depends_on: [../../src/ftr/cli.py, ../../src/ftr/models.py]
 terms: [TaskRequest, SemanticDecision, ResearchDraft, JSON CLI]
 confidence: implementation_verified_locally
@@ -9,7 +9,7 @@ confidence: implementation_verified_locally
 
 # 使用流程与接口
 
-以下命令使用安装后的 `ftr`；源码环境在命令前加 `uv run`。全局配置参数置于子命令之前，或通过绝对 `FTR_CONFIG` 路径统一指定。所有 ID 为实际响应值，示例中的占位符不可直接作为真实任务提交。
+以下命令使用安装后的 `ftr`；首次 setup 后，源码目录优先使用 `sh scripts/run.sh`（macOS）或 `& .\scripts\run.ps1`（Windows）替代 ftr，它固定解释器与配置且不重新同步依赖。全局配置参数置于子命令之前，或通过绝对 `FTR_CONFIG` 路径统一指定。所有 ID 为实际响应值，示例中的占位符不可直接作为真实任务提交。
 
 ## 从采集到研究
 
@@ -133,6 +133,20 @@ ftr workbench status
 ftr workbench stop
 ```
 
-start 仅回环监听，复用同资料目录已健康服务，按 8765–8774 尝试端口。启动后校验私有进程身份及只读 API；浏览器打开失败仍返回 URL。缺资料库不创建；stop 验证身份后停止本应用，不杀端口上的其他程序。已有前台 serve 命令保持可用，单独管理的 serve 不属于 lifecycle 进程。
+start 仅回环监听，复用同资料目录已健康服务，默认从 8765 起尝试十个端口；显式 web.port 从指定端口起尝试，只有端口冲突换端口。启动后校验私有进程身份及只读 API；浏览器打开失败仍返回 URL。缺资料库不创建；stop 验证身份后停止本应用，不杀端口上的其他程序。已有前台 serve 命令保持可用，单独管理的 serve 不属于 lifecycle 进程。
 
 规则自修复使用增量 repair 子命令，见[专门指南](self-repair.md)。旧 repair test 仍禁止未知代码执行，release status/governed 仍阻塞。RULE_ACTIVE 仅表示规则本机生效及首次续跑成功，不表示任务全部完成或资料自动通过复核。
+
+## 可靠性与结果解释（2026-10-02）
+
+HTTP 连接失败、超时及 502/503/504 默认最多尝试三次，退避 1 秒、2 秒加少量抖动，仍执行主机和请求间隔约束；401/403/429、越界和结构异常不按瞬态故障继续。详情瞬态失败耗尽后登记 FAILED 并继续，同来源连续三条才停止，成功后重置计数。列表失败保留原页检查点。Repair 验证的实际列表请求至多一次、详情及附件 HTTP 请求合计至多两次，重试和重定向均计数；时间与任务暂停仍受限。
+
+每 30 秒向 stderr 输出最后检查点进度（发现、保存、失败、当前来源页数、耗时），请求执行中重复显示上次快照；不代表每条进度都是新检查点，不显示未知总量百分比。stdout 仍为一个最终 JSON，schema 命令增加 runtime_settings 定义。
+
+采集结果 data 包含 stop_reasons、remaining_queue、resume_argv；remaining_queue 是本任务全部队列状态计数，待续跑数量由 PENDING/FAILED 判断。resume_argv 是命令参数数组，宿主须按原参数传递而非直接拼接 shell 字符串。预算结束后报告结果，等待用户要求续跑。
+
+SIGINT/SIGTERM 登记中断意图，在检查点以 PARTIAL 收束；外部强制终止无法即时更新数据库，后续写入者取得独占锁后才将残留 RUNNING 修正为 PARTIAL 并登记 batch_stopped 审计。task status 与 Web 保持只读，不自行修正记录；writer_activity 只报告目录是否观察到写入锁，不确认具体任务在线。
+
+Web 概览 quarantine_reasons 按最新隔离资料统计原因代码；详情 limitation_reasons 包含 code/label/original。多原因资料可计入多项，历史未知原因保留原文。任务接口增加 writer_activity 与 last_batch（停止原因与记录时间）。派生解释不改变资料 JSON、摘要、日期和复核状态。
+
+PDF 警告汇总到结果 warnings，完整警告保存为证据并通过 pdf_warnings 审计绑定原附件；有警告的资料增加内容完整性待复核限制，不自动视为解析完整。

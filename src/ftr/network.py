@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ipaddress
+import random
 import socket
 import time
 from collections.abc import Mapping, Sequence
@@ -57,6 +58,62 @@ class AccessBlocked(RuntimeError):
     pass
 
 
+class TransientFailure(RuntimeError):
+    """An exhausted transient request, never an access or trust-boundary failure."""
+
+
+class RetryPolicy:
+    def _configure_retry(self, settings):
+        self.retry_attempts = settings.retry_attempts if settings else 3
+        self.retry_backoff = settings.retry_backoff_seconds if settings else 1
+        self.before_request = None
+        self.checkpoint = None
+
+    def _check(self):
+        if self.checkpoint is not None:
+            self.checkpoint()
+
+    def _wait(self, duration):
+        until = time.monotonic() + duration
+        while True:
+            self._check()
+            remaining = until - time.monotonic()
+            if remaining <= 0:
+                return
+            time.sleep(min(0.1, remaining))
+
+    def _before(self, url):
+        self._check()
+        if self.before_request is not None:
+            self.before_request(url)
+
+    def _retry_call(self, call):
+        for attempt in range(self.retry_attempts):
+            try:
+                return call()
+            except (httpx.ConnectError, httpx.TimeoutException) as exc:
+                failure = TransientFailure(f"来源请求失败（{type(exc).__name__}）")
+                failure.__cause__ = exc
+            except TransientFailure as exc:
+                failure = exc
+            except RuntimeError as exc:
+                if not isinstance(
+                    exc.__cause__,
+                    (
+                        requests.ConnectionError,
+                        requests.Timeout,
+                        requests.exceptions.ChunkedEncodingError,
+                    ),
+                ):
+                    raise
+                failure = TransientFailure(f"来源请求失败（{type(exc.__cause__).__name__}）")
+                failure.__cause__ = exc
+            if attempt + 1 == self.retry_attempts:
+                raise failure
+            self._wait(self.retry_backoff * (2**attempt) + random.uniform(0, 0.25))
+        raise AssertionError("无效重试次数")
+
+
 @lru_cache(maxsize=1)
 def local_https_proxy() -> str | None:
     """读取系统已配置的本地 HTTPS 代理，供浏览器和 HTTP 客户端共同使用。"""
@@ -102,7 +159,7 @@ def check_url(url: str, allowed_hosts: list[str], proxy: object = _UNSET) -> str
     return host
 
 
-class BoundedClient:
+class BoundedClient(RetryPolicy):
     def __init__(
         self,
         allowed_hosts: list[str],
@@ -112,6 +169,7 @@ class BoundedClient:
         settings: NetworkSettings | None = None,
         proxy: object = _UNSET,
     ):
+        self._configure_retry(settings)
         self.allowed_hosts = allowed_hosts
         self.interval = settings.interval_seconds if settings else interval
         self.max_bytes = settings.max_file_bytes if settings else max_bytes
@@ -132,22 +190,18 @@ class BoundedClient:
         self._client.close()
 
     def get(self, url: str) -> tuple[bytes, str, str]:
-        for attempt in range(3):
-            try:
-                return self._get(url)
-            except httpx.TransportError as exc:
-                if attempt == 2:
-                    raise RuntimeError(f"来源请求失败（{type(exc).__name__}）") from exc
-            except httpx.HTTPError as exc:
-                raise RuntimeError(f"来源请求失败（{type(exc).__name__}）") from exc
-        raise RuntimeError("网络重试耗尽")
+        try:
+            return self._retry_call(lambda: self._get(url))
+        except httpx.HTTPError as exc:
+            raise RuntimeError(f"来源请求失败（{type(exc).__name__}）") from exc
 
     def _get(self, url: str) -> tuple[bytes, str, str]:
         for _ in range(6):
             check_url(url, self.allowed_hosts, self.proxy)
             remaining = self.interval - (time.monotonic() - self._last_request)
             if remaining > 0:
-                time.sleep(remaining)
+                self._wait(remaining)
+            self._before(url)
             self._last_request = time.monotonic()
             with self._client.stream("GET", url) as response:
                 if response.status_code in (301, 302, 303, 307, 308):
@@ -157,6 +211,8 @@ class BoundedClient:
                     continue
                 if response.status_code in (401, 403, 429):
                     raise AccessBlocked(f"来源限制访问，HTTP {response.status_code}: {url}")
+                if response.status_code in (502, 503, 504):
+                    raise TransientFailure(f"来源瞬态响应异常，HTTP {response.status_code}")
                 try:
                     response.raise_for_status()
                 except httpx.HTTPStatusError as exc:
@@ -173,7 +229,7 @@ class BoundedClient:
         raise AccessBlocked("重定向次数超过上限")
 
 
-class BrowserSessionClient:
+class BrowserSessionClient(RetryPolicy):
     """仅复用同一浏览器会话访问已登记主机，凭据不落盘。"""
 
     def __init__(
@@ -185,6 +241,7 @@ class BrowserSessionClient:
         settings: NetworkSettings | None = None,
         proxy: object = _UNSET,
     ):
+        self._configure_retry(settings)
         self.allowed_hosts = allowed_hosts
         self.interval = settings.interval_seconds if settings else interval
         self.max_bytes = settings.max_file_bytes if settings else max_bytes
@@ -232,7 +289,8 @@ class BrowserSessionClient:
             check_url(url, self.allowed_hosts, self.proxy)
             remaining = self.interval - (time.monotonic() - self._last_request)
             if remaining > 0:
-                time.sleep(remaining)
+                self._wait(remaining)
+            self._before(url)
             self._last_request = time.monotonic()
             try:
                 response = self._session.request(
@@ -250,6 +308,8 @@ class BrowserSessionClient:
                     continue
                 if response.status_code in (401, 403, 429):
                     raise AccessBlocked(f"来源限制访问，HTTP {response.status_code}: {url}")
+                if response.status_code in (502, 503, 504):
+                    raise TransientFailure(f"来源瞬态响应异常，HTTP {response.status_code}")
                 try:
                     response.raise_for_status()
                 except requests.RequestException as exc:
@@ -269,16 +329,7 @@ class BrowserSessionClient:
         raise AccessBlocked("重定向次数超过上限")
 
     def _retry(self, method, url, data=None):
-        for attempt in range(3):
-            try:
-                return self._request(method, url, data)
-            except RuntimeError as exc:
-                if (
-                    not isinstance(exc.__cause__, (requests.ConnectionError, requests.Timeout))
-                    or attempt == 2
-                ):
-                    raise
-        raise RuntimeError("网络重试耗尽")
+        return self._retry_call(lambda: self._request(method, url, data))
 
     def get(self, url: str) -> tuple[bytes, str, str]:
         return self._retry("GET", url)

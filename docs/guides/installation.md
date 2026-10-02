@@ -1,7 +1,7 @@
 ---
 type: project_document
 status: active
-updated_at: 2026-09-30
+updated_at: 2026-10-02
 depends_on: [../../pyproject.toml, configuration.md]
 terms: [Python 3.13, wheel, Xvfb, 局域网]
 confidence: implementation_verified_locally
@@ -13,13 +13,19 @@ confidence: implementation_verified_locally
 
 ## 非技术伙伴与宿主引导
 
-完整插件目录提供 `setup` Skill 和引导脚本。macOS 执行 `sh scripts/setup.sh all`，Windows 执行 `& .\scripts\setup.ps1 -Capability all`；能力选项为 mof/chinatax/workbench/all。先检测 uv/Python，再按需要同步依赖；无需先有 ftr。已有 Python 由独立虚拟环境复用，缺 Python 时由 uv 下载到用户级 managed storage。不会修改系统 Python、shell profile、全局代理或已有配置。
+先获取完整项目：`git clone https://github.com/anbang278/finance-tax-policy-acquisition`，或在 GitHub 仓库的 Code 菜单下载 ZIP 并解压。两种方式均应包含 `pyproject.toml`、`uv.lock`、`scripts/` 和 `skills/`。下载失败诊断网络与代理，不修改全局代理。无需 Git 即可使用完整源码包；单独 wheel 不包含宿主 Skill。
 
-缺 uv 的桌面机器从 [Astral 官方 release 0.8.22](https://github.com/astral-sh/uv/releases/tag/0.8.22) 下载对应架构制品并核对仓库固定 SHA-256；已有 PATH 或专属用户目录中的 uv 直接复用。用户目录为 macOS `~/.local/share/ftr/bootstrap/bin`，Windows `%LOCALAPPDATA%/FTR/bootstrap/bin`。本机依赖仍由 uv.lock 锁定，浏览器由已锁定 Playwright 安装。Python 自动下载方式见 [uv 官方说明](https://docs.astral.sh/uv/guides/install-python/)。
+完整目录提供 setup Skill。macOS 执行 `sh scripts/setup.sh all`，Windows 执行 `& .\scripts\setup.ps1 -Capability all`；能力选项为 mof/chinatax/workbench/all。优先复用 uv 与 Python 3.13，缺失时安装到用户级位置；使用锁定依赖、固定项目虚拟环境，保留已有 Web extra。安装和运行入口仅对子进程隔离 PYTHONHOME/PYTHONPATH，保留代理、证书及缓存设置。
 
-引导返回 ENVIRONMENT_READY/BLOCKED、绝对 python/config/data_dir、分项依赖和浏览器实际启动结果；后续调用 `"绝对 Python" -m ftr.cli --config "绝对配置" ...`，避免宿主 PATH 差异。已指定 FTR_CONFIG 但文件缺失时明确失败，不另建配置。网络安装失败保留配置，重复运行继续补齐。安装只是本机准备，不证明源站接受访问。
+缺 uv 的桌面机器从 Astral 官方 release 0.8.22 下载对应架构制品并核对固定 SHA-256；用户目录为 macOS `~/.local/share/ftr/bootstrap/bin`、Windows `%LOCALAPPDATA%/FTR/bootstrap/bin`。不修改系统 Python、shell profile 或永久执行策略。Linux 缺 uv、系统库或显示环境时按下文由部署者处理，不自动 sudo。
 
-Linux 缺 uv 或浏览器系统库时按官方安装和下文系统依赖说明人工处理；不自动 sudo。Windows 执行策略由用户按组织规则处理，脚本不修改永久执行策略。Chromium 启动空白页检查不采集，不建立数据库。
+税务浏览器顺序：显式路径 → 已有 Playwright Chromium → Edge → Chrome → 下载 Chromium。自动候选逐个启动验证，不访问源站；显式配置失效不换用其他浏览器。不使用用户日常浏览器资料目录。Linux 保留有界面与 Xvfb 要求。
+
+setup 最后一条 JSON 包含 state、stage、capability、error_code、next_step、python/config/data_dir、runner、version 和浏览器检查。Git 目录记录提交号，完整源码包记录包版本与关键文件 SHA-256。ENVIRONMENT_READY 只代表环境准备，source_access_tested 始终为 false。
+
+后续使用 `sh scripts/run.sh ...` 或 `& .\scripts\run.ps1 ...`，入口不再同步依赖。默认使用项目的 ftr.local.yaml；`FTR_CONFIG` 指向已有外部配置，指定缺失或非法配置时报错；`FTR_DATA_DIR` 可指定资料目录。既有配置不重写。使用报告中绝对 runner 路径可避免宿主工作目录不同；全局 `--config`/`--data-dir` 参数仍可覆盖默认值。
+
+安装只准备环境，不创建资料库、不采集。Windows/macOS 的全新设备、真实宿主调用与源站准入须独立验收。本轮原生安装为主，不交付 Docker。
 
 
 ## 覆盖范围与环境要求

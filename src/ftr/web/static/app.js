@@ -1,3 +1,5 @@
+const reasonLabels = {missing_filter_date: '筛选日期缺失', missing_content: '标题或正文缺失', unreliable_body: '正文定位待确认', unknown_document_type: '资料类型待确认', attachment_not_saved: '附件未保存', primary_attachment_unparsed: '主附件未解析', primary_content_unparsed: '主内容未解析', pdf_extraction_warning: 'PDF 完整性待复核', other_historical: '其他／历史原因'};
+const stopLabels = {BUDGET_REACHED: '达到本批预算', INTERRUPTED: '收到中断信号', INTERRUPTED_PREVIOUS_WRITER: '前次运行异常结束', PAUSE_REQUESTED: '收到暂停请求', CANCEL_REQUESTED: '收到取消请求', TRANSIENT_FAILURE_LIMIT: '连续网络失败达到上限', SOURCE_FAILURE: '来源失败待诊断', TRANSIENT_NETWORK: '来源网络失败', INCOMPLETE_QUEUE: '队列尚未完成'};
 let uiConfig = {poll_interval_ms: 5000, request_timeout_ms: 10000};
 const $ = (selector) => document.querySelector(selector);
 const names = {
@@ -91,7 +93,8 @@ function renderOverview(data) {
     [data.tasks_total, '采集任务', ''], [data.task_counts.RUNNING || 0, '记录为运行中', ''],
     [data.task_counts.PARTIAL || 0, '部分完成', 'attention'], [data.task_counts.WAITING_DECISION || 0, '等待复核', 'attention'],
   ];
-  updateNode($('#overview'), values.map(([count, text, style]) => `<div class="stat ${style}"><strong>${count}</strong><span>${text}</span></div>`).join(''));
+  const reasonCounts = state.view === 'policies' && data.quarantine_reasons?.length ? `<p class="body-note">内容受限原因（同一份资料可计入多项）：${data.quarantine_reasons.map((r) => `${esc(reasonLabels[r.code] || '其他／历史原因')} ${r.count}`).join(' · ')}</p>` : '';
+  updateNode($('#overview'), values.map(([count, text, style]) => `<div class="stat ${style}"><strong>${count}</strong><span>${text}</span></div>`).join('') + reasonCounts);
 }
 
 function renderPolicies(data) {
@@ -106,7 +109,7 @@ function downloadLink(id, text) {
 }
 
 function renderPolicy(d, versions) {
-  const header = `<div class="detail-header"><button class="mobile-back" data-back>${icon('back')}返回政策列表</button><div class="detail-eyebrow"><span>${esc(label(names.type, d.document_type))}</span>${badge('quality', d.quality_state)}<span>来源 v${d.source_version} · 提取 v${d.extraction_version}</span></div><h2>${esc(d.title || '标题缺失')}</h2><div class="doc-meta"><span>来源 <b>${esc(label(names.source, d.source_id))}</b></span><span>文号 <b>${esc(d.document_number || '未提取')}</b></span><span>${esc(dateName(d.listing_date_kind))} <b>${esc(d.listing_date || '缺失')}</b></span><span>成文日期 <b>${esc(d.issued_date || '未提取')}</b></span><span>发布日期 <b>${esc(d.published_date || '未提取')}</b></span></div><div class="origin-row"><div>官方原文${external(d.source_url, d.source_url || '')}</div><button class="button" data-task="${esc(d.task_id)}">${icon('activity')}关联任务</button></div>${d.limitations.length ? `<div class="limitation">${d.limitations.map((item) => `<p>${esc(item)}</p>`).join('')}</div>` : ''}</div>`;
+  const header = `<div class="detail-header"><button class="mobile-back" data-back>${icon('back')}返回政策列表</button><div class="detail-eyebrow"><span>${esc(label(names.type, d.document_type))}</span>${badge('quality', d.quality_state)}<span>来源 v${d.source_version} · 提取 v${d.extraction_version}</span></div><h2>${esc(d.title || '标题缺失')}</h2><div class="doc-meta"><span>来源 <b>${esc(label(names.source, d.source_id))}</b></span><span>文号 <b>${esc(d.document_number || '未提取')}</b></span><span>${esc(dateName(d.listing_date_kind))} <b>${esc(d.listing_date || '缺失')}</b></span><span>成文日期 <b>${esc(d.issued_date || '未提取')}</b></span><span>发布日期 <b>${esc(d.published_date || '未提取')}</b></span></div><div class="origin-row"><div>官方原文${external(d.source_url, d.source_url || '')}</div><button class="button" data-task="${esc(d.task_id)}">${icon('activity')}关联任务</button></div>${d.limitations.length ? `<div class="limitation">${(d.limitation_reasons || d.limitations.map((item) => ({label: item, original: item}))).map((item) => `<p>${esc(item.label)}${item.original !== item.label ? `：${esc(item.original)}` : ''}</p>`).join('')}</div>` : ''}</div>`;
   const tabs = [['body', '正文'], ['attachments', `附件 ${d.attachments.length}`], ['versions', `版本 ${versions.length}`], ['evidence', '证据']];
   let content = '';
   if (state.policyTab === 'body') {
@@ -142,7 +145,7 @@ function renderTask(t, items, events) {
     content = `<h3 class="section-title">原始任务请求</h3><pre class="request-json">${esc(JSON.stringify(t.request, null, 2))}</pre><p class="body-note">预算是本次采集上限，不是政策全量分母。待语义复核项：${t.pending_decisions} 个。</p>`;
   }
   const tabs = [['queue', '发现队列'], ['events', '事件与失败'], ['request', '任务参数']];
-  updateNode($('#task-detail'), `<div class="detail-header"><button class="mobile-back" data-back>${icon('back')}返回任务列表</button><div class="task-heading-row">${badge('task', t.state)}<span class="task-id mono">${esc(t.task_id.slice(0, 12))}</span></div><h2>采集 · ${esc(t.request.date_from)} — ${esc(t.request.date_to)}</h2><div class="doc-meta"><span>创建时间 <b>${esc(stamp(t.created_at))}</b></span><span>最近状态记录 <b>${esc(stamp(t.last_state_at))}</b></span></div><div class="task-id mono">${esc(t.task_id)}</div>${warning}${sources}</div><div class="detail-tabs" role="tablist" aria-label="任务内容">${tabs.map(([key, title]) => `<button role="tab" aria-selected="${state.taskTab === key}" class="${state.taskTab === key ? 'active' : ''}" data-task-tab="${key}">${title}</button>`).join('')}</div><div class="detail-body">${content}</div>`);
+  updateNode($('#task-detail'), `<div class="detail-header"><button class="mobile-back" data-back>${icon('back')}返回任务列表</button><div class="task-heading-row">${badge('task', t.state)}<span class="task-id mono">${esc(t.task_id.slice(0, 12))}</span></div><h2>采集 · ${esc(t.request.date_from)} — ${esc(t.request.date_to)}</h2><div class="doc-meta"><span>创建时间 <b>${esc(stamp(t.created_at))}</b></span><span>最近状态记录 <b>${esc(stamp(t.last_state_at))}</b></span></div><div class="task-id mono">${esc(t.task_id)}</div>${warning}<p class="body-note">活动检查：${esc(t.writer_activity === 'NO_WRITER_OBSERVED' ? '未观察到写入者' : t.writer_activity === 'WRITER_LOCK_HELD_TASK_UNKNOWN' ? '资料目录有写入者，具体任务未确认' : '无法确认')}。任务状态按数据库记录展示。</p>${t.last_batch?.reasons?.length ? `<div class="limitation">最近批次停止原因：${t.last_batch.reasons.map((r) => esc(stopLabels[r] || r)).join('；')}</div>` : ''}${sources}</div><div class="detail-tabs" role="tablist" aria-label="任务内容">${tabs.map(([key, title]) => `<button role="tab" aria-selected="${state.taskTab === key}" class="${state.taskTab === key ? 'active' : ''}" data-task-tab="${key}">${title}</button>`).join('')}</div><div class="detail-body">${content}</div>`);
   applyMobile();
 }
 

@@ -1,7 +1,7 @@
 ---
 type: project_document
 status: active
-updated_at: 2026-09-30
+updated_at: 2026-10-02
 depends_on: [../../src/ftr/config.py, ../../ftr.example.yaml]
 terms: [RuntimeSettings, 配置优先级, 运行预算]
 confidence: implementation_verified_locally
@@ -38,7 +38,7 @@ YAML 的 `data_dir` 与 `browser.executable_path` 相对路径基于配置文件
 | `network.interval_seconds` | `FTR_NETWORK__INTERVAL_SECONDS` | `2` | 有限非负数；同来源客户端请求间隔 |
 | `network.max_file_bytes` | `FTR_NETWORK__MAX_FILE_BYTES` | `50000000` | 正整数；正文、列表、附件单响应字节上限 |
 | `browser.headless` | `FTR_BROWSER__HEADLESS` | `false` | 布尔值；不因失败自动切换模式 |
-| `browser.executable_path` | `FTR_BROWSER__EXECUTABLE_PATH` | `null` | 非空路径或空值；默认使用 Playwright Chromium |
+| `browser.executable_path` | `FTR_BROWSER__EXECUTABLE_PATH` | `null` | 非空路径或空值；空值时自动验证已有 Chromium、Edge、Chrome；显式路径失效不替换 |
 | `browser.timeout_seconds` | `FTR_BROWSER__TIMEOUT_SECONDS` | `30` | 有限正数；浏览器启动、导航及等待列表响应超时 |
 | `collection.max_pages` | `FTR_COLLECTION__MAX_PAGES` | `1000` | 整数 1–1000；CLI `--max-pages` 可覆盖 |
 | `collection.max_documents` | `FTR_COLLECTION__MAX_DOCUMENTS` | `1000` | 整数 1–1000；计新增资料版本，CLI `--max-documents` 可覆盖 |
@@ -48,6 +48,12 @@ YAML 的 `data_dir` 与 `browser.executable_path` 相对路径基于配置文件
 | `web.port` | `FTR_WEB__PORT` | `8765` | 整数 1–65535；CLI `serve --port` 可覆盖 |
 | `web.poll_interval_ms` | `FTR_WEB__POLL_INTERVAL_MS` | `5000` | 整数，至少 100；可见页面轮询间隔 |
 | `web.request_timeout_ms` | `FTR_WEB__REQUEST_TIMEOUT_MS` | `10000` | 整数，至少 100；前端查询超时 |
+
+| `network.retry_attempts` | `FTR_NETWORK__RETRY_ATTEMPTS` | `3` | 整数 1–5；连接失败、超时、502/503/504 的最多尝试次数，含首次；Repair 限额优先 |
+| `network.retry_backoff_seconds` | `FTR_NETWORK__RETRY_BACKOFF_SECONDS` | `1` | 有限正数，至多 30；重试指数退避基数，额外抖动 0–0.25 秒 |
+| `collection.consecutive_failure_limit` | `FTR_COLLECTION__CONSECUTIVE_FAILURE_LIMIT` | `3` | 整数 1–10；同来源连续详情瞬态失败阈值，成功后归零 |
+| `collection.progress_interval_seconds` | `FTR_COLLECTION__PROGRESS_INTERVAL_SECONDS` | `30` | 有限正数；stderr 定期进度间隔，显示最后检查点，不作为全量进度百分比 |
+| `web.startup_timeout_seconds` | `FTR_WEB__STARTUP_TIMEOUT_SECONDS` | `15` | 有限正数，至多 120；工作台启动总截止时间，区别于页面请求超时 |
 
 数字环境变量用十进制值；布尔值用 `true/false`。路径、地址和代理 URL 按字符串读取；可选 proxy_url/executable_path 的环境变量空字符串表示清除配置值。切换显式代理为 direct/system 时须同时清除继承的 proxy_url。单响应限额与批次预算是不同口径；运行时间按工作检查点评估，正在执行的请求受请求超时控制，并非强制在预算秒数处杀进程。列表原件保存，但现有批次字节计数只统计正文与附件。
 

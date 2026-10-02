@@ -102,3 +102,27 @@
 本轮无数据库 schema 变更；旧任务、备份与默认数据目录兼容。内置规则保留原 parser_version 去重口径，活动自修复规则追加版本哈希。备份包含 rules 制品/报告和数据库审计；旧备份无 rules 时使用内置规则。正式 Python 治理仍 BLOCKED，不能提升为生产验收或全国政策覆盖证明。
 
 使用入口：[安装](../guides/installation.md)、[工作台与 CLI](../guides/usage.md)、[规则自修复](../guides/self-repair.md)。
+
+## 首次配置与运行可靠性升级（2026-10-02）
+
+本轮**本机工程验证 PASS，干净桌面／真实宿主／源站验收 PARTIAL**。伙伴执行总结仅作为问题线索，未把其中的数量、网络归因或“已跑通”作为本仓库实测证据。实施为普通授权开发，不扩大受限 Repair 的权限。
+
+| 验收面 | 结果 | 实际证据与边界 |
+|---|---|---|
+| 自动配置与运行入口 | PASS（隔离测试） | 保护已有配置与数据，固定 Python 3.13，子进程隔离 PYTHONHOME/PYTHONPATH，保留已有 Web extra；运行包装器参数透传、中文空格路径、显式浏览器失效不替换、缺失浏览器下载失败与安装后验证。下载命令使用替身，未证明全新设备真实下载完成 |
+| 浏览器与环境说明 | PASS（本机／故障注入） | 自动选择已有 Chromium、Edge、Chrome，按顺序验证启动；doctor 仅展示候选文件，不宣称启动或源站通过。完整浏览器回归实际运行 Chromium；本机 Edge/Chrome 策略兼容与干净 Windows 安装另验 |
+| 工作台生命周期 | PASS（本机真实进程） | 包装启动器 PID 与服务 PID 分离，令牌／目录／实例握手、旧状态文件识别、错误 PID/实例停止拒绝、慢启动、端口冲突、解释器退出不轮试十端口、总启动超时、缺 Web 依赖分类、日志凭据与令牌脱敏；数据库字节不变 |
+| 网络与连续失败 | PASS（受控替身） | 两客户端 502/503/504 最多三次尝试，默认 1/2 秒基础退避加抖动；403/429 不重试，未知故障停止；单条瞬态失败继续、连续三条停止、成功重置、列表失败原检查点保持及续跑幂等 |
+| Repair 门禁兼容 | PASS（受控替身） | 重试与重定向经过实际 HTTP 请求计数，验证至多一次列表、两次详情及附件请求；等待可被暂停/取消/预算阻止。浏览器代码纳入执行器指纹；已保存资料后收到 INTERRUPTED/PAUSE_REQUESTED/CANCEL_REQUESTED 的首次续跑仍回退，不启用规则 |
+| 进度与中断 | PASS（本机／故障注入） | stderr 定期输出最后检查点快照，不改变最终 stdout JSON。实际 POSIX SIGTERM 子进程以 PARTIAL 和中断原因收束；真实硬退出留下 RUNNING，仅取得独占锁后修正并审计。查询状态不写库、不把 RUNNING 当在线证明 |
+| 质量解释与旧数据 | PASS（隔离测试） | 最新隔离资料多原因统计、未知历史原因保留原文、详情派生原因及任务停止原因；读取前后数据库字节一致。PDF 警告保留证据并审计绑定附件，新增完整性复核限制；旧任务/备份回归继续通过，无新增数据库表，无历史资料摘要或质量状态重写 |
+| 完整自动测试 | PASS（macOS） | `FTR_WEB_BROWSER=1 uv run --frozen --no-sync --extra dev --extra web pytest -q`：**158 passed, 1 skipped**，31.92 秒。唯一跳过为 Windows 原生 PowerShell 入口测试；包含真实 Chromium 页面交互 |
+| 静态／格式／脚本 | PASS | `ruff check src tests scripts` 通过；`mypy --ignore-missing-imports src` 覆盖 24 个源文件通过，仍使用项目指定忽略第三方缺失声明口径；16 个新增/修改 Python 文件格式检查通过；`sh -n scripts/setup.sh scripts/run.sh` 与 `git diff --check` 通过 |
+| 构建与独立安装 | PASS（macOS） | `uv build` 构建 sdist/wheel；`uv run --frozen --no-sync --extra dev --extra web python scripts/verify_wheel.py` 从源码目录外创建独立环境安装 wheel，验证新模块与参数、打包模板/规则样本、静态资源、只读 API 和工作台实例身份及启动/状态/停止 |
+| 文档与参数契约 | PASS | 当前文档相对链接、frontmatter depends_on 与代码块闭合检查通过；RuntimeSettings 与模板一致，共 22 个参数。README、操作指南、三个有关 Skill、PRD/设计/实施/测试计划/追踪矩阵同步 |
+| 三平台 CI／桌面宿主 | PARTIAL | CI 已纳入 Windows setup.ps1/run.ps1 语法与 Windows 原生入口回归；本轮未提交、推送或触发远程 CI。Windows/Linux 实际新增测试结果、干净 Windows/macOS 安装及 Codex/Hermes 真实模型调用未验收 |
+| 真实来源 | 未执行 | 未执行真实财政部/税务采集，不能宣称源站准入、全年覆盖或新重试策略在真实源站的效果已经通过 |
+
+新增五个运行参数和派生响应字段，保持 CLI 主协议、冻结 TaskRequest、默认资料目录与旧状态/备份兼容。setup 返回 Git 提交号以及运行关键文件摘要，提交号不能单独代表未提交代码。没有提交、推送、宿主插件安装、部署、业务资料状态代判或长期记忆写入。
+
+遗留验收需要真实设备、宿主会话及当前任务的采集授权；本轮不将这些缺口计为通过。后续使用入口见 [安装](../guides/installation.md)、[运行参数](../guides/configuration.md)、[使用与诊断](../guides/usage.md)。

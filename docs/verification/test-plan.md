@@ -59,3 +59,13 @@
 追踪入口：setup → scripts/setup.sh、setup.ps1、setup_runtime.py → tests/test_setup.py；规则闭环 → rules.py、rule_repair.py、runtime.py → tests/test_rule_repair.py；工作台 → workbench.py → tests/test_workbench_lifecycle.py。既有回归、wheel 与三平台 CI 继续执行。
 
 验收须分开记录离线故障注入、真实源站及 macOS/Windows × Codex/Hermes 会话。受控网络替身不代表真实访问成功，缺宿主/设备不能计通过。当前实现结果以 acceptance-report.md 本轮补充为准。
+
+## 首次配置与运行可靠性（2026-10-02）
+
+- 自动配置：已有/缺失浏览器、候选启动失败回退、显式失效不替换、配置保护、Web 依赖保留、中文空格路径、污染环境隔离、下载失败分阶段诊断与运行参数透传。
+- 服务：真实启动/复用/停止、包装 PID、旧状态、慢启动与总超时、错误身份拒绝、进程退出不轮试十端口；数据字节不变与日志脱敏。
+- 网络与采集：两客户端 502/503/504 有限重试、403/429 不重试、单条失败继续与连续失败停止、成功重置、列表检查点、预算与暂停取消中止等待、Repair 实际请求次数、续跑幂等。
+- 恢复及质量：周期 stderr 与单个 stdout JSON、信号及强制退出残留、只读活动观察、独占锁后恢复、旧备份、隔离多原因与旧未知原因、PDF 警告证据及质量限制。
+- 分发：完整浏览器回归、ruff/mypy、sdist/wheel、源码目录外独立安装；CI 包含 Windows setup/run PowerShell 语法和运行入口测试。
+
+真实源站、干净 Windows/macOS 安装和 Codex/Hermes 模型调用需分别记录；无设备或未获当前采集授权时为待验收，不以 mock/旧 CI 代替。

@@ -182,6 +182,7 @@ def test_browser_launch_uses_same_proxy_and_timeout_and_audit_is_redacted(tmp_pa
         network={"proxy_mode": "explicit", "proxy_url": "http://alice:secret@127.0.0.1:7890"},
         browser={"headless": True, "timeout_seconds": 9, "executable_path": tmp_path / "chromium"},
     )
+    (tmp_path / "chromium").touch()
     launch = Mock(return_value=Mock())
     driver = Mock()
     driver.__enter__ = Mock(return_value=SimpleNamespace(chromium=SimpleNamespace(launch=launch)))

@@ -11,7 +11,8 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from ftr.backup import create_backup, restore_backup, verify_backup
-from ftr.config import load_settings, load_sources, redact_proxy
+from ftr.config import RuntimeSettings, load_settings, load_sources, redact_proxy
+from ftr.diagnostics import recover_interrupted, task_diagnostics
 from ftr.environment import environment_report
 from ftr.models import OperationResponse, SemanticDecision, TaskRequest
 from ftr.network import resolve_proxy
@@ -31,7 +32,7 @@ def parser() -> argparse.ArgumentParser:
     root.add_argument("--data-dir", type=Path, help="覆盖运行数据目录")
     commands = root.add_subparsers(dest="command", required=True)
     config = commands.add_parser("config").add_subparsers(dest="action", required=True)
-    config.add_parser("show")
+    config.add_parser("show", help="显示配置、来源及网络重试／连续失败／进度／工作台启动超时参数")
     config.add_parser("validate")
     doctor = commands.add_parser("doctor")
     doctor.add_argument("--mode", choices=["local-demo", "governed"], default="local-demo")
@@ -228,6 +229,7 @@ def run(args: argparse.Namespace) -> OperationResponse:
             status="COMPLETED",
             data={
                 "task_request": TaskRequest.model_json_schema(),
+                "runtime_settings": RuntimeSettings.model_json_schema(),
                 "semantic_decision": SemanticDecision.model_json_schema(),
                 "research_draft": ResearchDraft.model_json_schema(),
                 "extraction_rules": __import__(
@@ -257,7 +259,10 @@ def run(args: argparse.Namespace) -> OperationResponse:
                 operation="task status",
                 task_id=args.task,
                 status=row["state"],
-                data={"sources": [dict(source) for source in source_rows]},
+                data={
+                    "sources": [dict(source) for source in source_rows],
+                    **task_diagnostics(connection, args.task, root),
+                },
             )
     request = None
     if args.command == "collect":
@@ -291,6 +296,7 @@ def run(args: argparse.Namespace) -> OperationResponse:
     with data_lock(root):
         repo = Repository(root)
         try:
+            recover_interrupted(repo)
             if args.command in ("collect", "task") or (
                 args.command == "repair" and args.action != "context"
             ):
@@ -467,9 +473,10 @@ def run(args: argparse.Namespace) -> OperationResponse:
 
 def main() -> None:
     # 固定 JSON 传输编码，避免 Windows 重定向输出受系统代码页影响。
-    reconfigure = getattr(sys.stdout, "reconfigure", None)
-    if reconfigure is not None:
-        reconfigure(encoding="utf-8")
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8")
     args = parser().parse_args()
     try:
         result = run(args)
@@ -485,7 +492,14 @@ def main() -> None:
         result = OperationResponse(
             operation=args.command,
             status="FAILED",
-            errors=[{"code": "EXECUTION_ERROR", "message": str(exc), "retryable": True}],
+            errors=[
+                {
+                    "code": getattr(exc, "details", {}).get("code", "EXECUTION_ERROR"),
+                    "message": str(exc),
+                    "retryable": True,
+                }
+            ],
+            data=getattr(exc, "details", {}),
         )
         code = 5
     print(result.model_dump_json())

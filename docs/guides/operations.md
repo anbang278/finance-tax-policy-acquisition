@@ -1,7 +1,7 @@
 ---
 type: project_document
 status: active
-updated_at: 2026-09-30
+updated_at: 2026-10-02
 depends_on: [configuration.md, ../../src/ftr/backup.py]
 terms: [数据迁移, 备份恢复, 单写者, 故障排查]
 confidence: implementation_verified_locally
@@ -80,3 +80,13 @@ ftr backup verify --path /备份根目录/备份名称
 备份包含 rules 活动版本、候选和报告，SQLite 中审计随数据库备份；恢复旧备份缺 rules 时使用内置规则。未完成 probation 在下一次采集/续跑/修复写入前自动回退，保留已保存资料与原件，不删除锁。规则验证与启用详见 [self-repair](self-repair.md)。
 
 工作台状态、日志和生命周期锁位于数据目录 .workbench.json/.workbench.log/.workbench.lock，不进入备份；状态含专属控制令牌，勿共享。迁移后重新 workbench start，身份验证不通过时禁止手工按记录 PID 杀进程。关闭使用 workbench stop；前台 serve 按 Ctrl+C。默认不暴露局域网。
+
+## 首次配置与故障诊断升级（2026-10-02）
+
+优先使用 setup/run 入口隔离宿主 PYTHONHOME/PYTHONPATH；不永久改系统设置。税务自动发现受支持浏览器，显式浏览器配置错误须由用户修正。重复 setup 保留 Web 依赖、配置与数据；源码包无需 Git，版本报告提供文件摘要。
+
+工作台失败分类为 DEPENDENCIES_MISSING、SPAWN_FAILED、PROCESS_EXITED、STARTUP_TIMEOUT、IDENTITY_MISMATCH、HEALTH_FAILED、PORTS_OCCUPIED，CLI data 提供阶段、端口、退出码、脱敏日志和下一步。只因端口冲突换端口；不手改状态文件，不按端口杀其他进程。新状态分别记录 launcher_pid、pid、instance_id，旧四字段状态继续验证 PID 与目录。
+
+502/503/504 等瞬态错误默认有限重试；耗尽后详情登记失败，连续失败阈值才停止该来源。状态为 PARTIAL 时核对 stop_reasons 和剩余 PENDING/FAILED，再由用户要求续跑。不用规则修复处理访问受限或瞬态网络错误。
+
+强制结束后数据库可能保留 RUNNING；task status 与查询页面不改库，后续取得独占锁的写入操作会修正并审计。锁文件存在不表示进程在线，不删除锁解冲突。PDF 警告保留在 evidence 和 pdf_warnings 审计，警告对应资料需要完整性复核。

@@ -248,6 +248,8 @@ def test_full_tax_rule_closed_loop(tmp_path, monkeypatch):
         close=lambda: None,
     )
     browser = SimpleNamespace(new_page=lambda: page, close=lambda: None)
+    (tmp_path / "browser").touch()
+    monkeypatch.setattr("ftr.browser.candidates", lambda *_: [("chromium", tmp_path / "browser")])
     monkeypatch.setattr(
         "ftr.runtime.sync_playwright",
         lambda: nullcontext(SimpleNamespace(chromium=SimpleNamespace(launch=lambda **_: browser))),
@@ -372,6 +374,7 @@ def test_detail_limit_counts_duplicate_versions(tmp_path, monkeypatch):
     calls = []
 
     def get(_client, url):
+        _client._before(url)
         calls.append(url)
         return sample["detail"].encode(), url, "text/html"
 
@@ -382,3 +385,39 @@ def test_detail_limit_counts_duplicate_versions(tmp_path, monkeypatch):
     assert len(calls) == 2
     assert collector.repo.db.execute("SELECT COUNT(*) FROM documents").fetchone()[0] == 3
     collector.close()
+
+
+@pytest.mark.parametrize("reason", ["INTERRUPTED", "PAUSE_REQUESTED", "CANCEL_REQUESTED"])
+def test_rule_probation_rolls_back_on_interrupted_result_after_saved_record(
+    tmp_path, monkeypatch, reason
+):
+    root, repo, _task, failure, path, sample = fault(tmp_path)
+    candidate = submit(root, repo, failure, path)["candidate_id"]
+    settings = RuntimeSettings(data_dir=root)
+    monkeypatch.setattr("ftr.runtime.check_url", lambda *_: "www.mof.gov.cn")
+    monkeypatch.setattr(
+        "ftr.network.BoundedClient.get",
+        lambda _, url: (
+            (
+                sample["listing"].replace("countPage", "newTotal")
+                if url.endswith("/")
+                else sample["detail"]
+            ).encode(),
+            url,
+            "text/html",
+        ),
+    )
+    verify_candidate(root, repo, candidate, settings, live=True)
+    original = Collector.resume
+
+    def stopped(self, *args, **kwargs):
+        result = original(self, *args, **kwargs)
+        assert self.processed_documents > 0
+        result.status = "PARTIAL"
+        result.data["stop_reasons"] = [reason]
+        return result
+
+    monkeypatch.setattr(Collector, "resume", stopped)
+    assert activate(root, repo, candidate, settings)["state"] == "RULE_ROLLED_BACK"
+    assert active_rules(root, "mof").version == Rules(source_id="mof").version
+    repo.close()

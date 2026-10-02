@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import io
+import json
+import logging
 import os
+import signal
 import sqlite3
 import sys
+import threading
 import time
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
@@ -19,6 +23,7 @@ from pypdf import PdfReader
 from ftr.adapters.chinatax import ChinataxAdapter
 from ftr.adapters.common import canonical_url, parse_detail
 from ftr.adapters.mof import MofAdapter
+from ftr.browser import launch_browser
 from ftr.config import RuntimeSettings, SourceConfig, load_sources, redact_proxy
 from ftr.evidence import EvidenceStore
 from ftr.models import (
@@ -33,6 +38,7 @@ from ftr.network import (
     AccessBlocked,
     BoundedClient,
     BrowserSessionClient,
+    TransientFailure,
     browser_proxy,
     check_url,
     resolve_proxy,
@@ -42,7 +48,18 @@ from ftr.rules import Rules, StructureDrift, active_rules
 
 
 class BudgetReached(RuntimeError):
-    pass
+    def __init__(self, message, code="BUDGET_REACHED"):
+        super().__init__(message)
+        self.code = code
+
+
+class PdfWarnings(logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self.messages: list[str] = []
+
+    def emit(self, record):
+        self.messages.append(record.getMessage())
 
 
 _PROXY_UNSET = object()
@@ -89,6 +106,10 @@ class Collector:
         self.incomplete_documents = 0
         self.detail_limit = detail_limit
         self.detail_attempts = 0
+        self._transient_streak: dict[str, int] = {}
+        self._interrupted = False
+        self._progress_snapshot: dict = {}
+        self._stop_reasons: list[str] = []
 
     def close(self) -> None:
         self.repo.close()
@@ -98,6 +119,105 @@ class Collector:
         return self.resume(task_id)
 
     def resume(self, task_id: str, *, bounded_source: str | None = None) -> OperationResponse:
+        finished = threading.Event()
+        self._interrupted = False
+        self._stop_reasons = []
+        self._transient_streak = {}
+        self._progress_started = time.monotonic()
+        self._progress_snapshot = {"task_id": task_id, "stage": "starting"}
+        previous = {}
+        if threading.current_thread() is threading.main_thread():
+            for signum in (signal.SIGINT, signal.SIGTERM):
+                previous[signum] = signal.getsignal(signum)
+                signal.signal(signum, self._interrupt)
+        reporter = threading.Thread(target=self._report_progress, args=(finished,), daemon=True)
+        reporter.start()
+        try:
+            return self._resume(task_id, bounded_source=bounded_source)
+        except KeyboardInterrupt:
+            self.repo.set_task_state(task_id, "PARTIAL")
+            self.repo.audit(task_id, "batch_stopped", {"reasons": ["INTERRUPTED"]})
+            return OperationResponse(
+                operation="collect",
+                task_id=task_id,
+                status="PARTIAL",
+                data={"stop_reasons": ["INTERRUPTED"], "resume_argv": self._resume_argv(task_id)},
+            )
+        finally:
+            finished.set()
+            reporter.join(timeout=1)
+            for signum, handler in previous.items():
+                signal.signal(signum, handler)
+
+    def _interrupt(self, signum, frame):
+        self._interrupted = True
+
+    def _report_progress(self, finished):
+        while not finished.wait(self.settings.collection.progress_interval_seconds):
+            snapshot = {
+                **self._progress_snapshot,
+                "elapsed_seconds": round(time.monotonic() - self._progress_started, 1),
+            }
+            print(
+                "ftr progress " + json.dumps(snapshot, ensure_ascii=False),
+                file=sys.stderr,
+                flush=True,
+            )
+
+    def _resume_argv(self, task_id):
+        args = [sys.executable, "-m", "ftr.cli"]
+        if self.settings._config_path:
+            args += ["--config", str(self.settings._config_path)]
+        return args + [
+            "--data-dir",
+            str(self.data_dir.resolve()),
+            "task",
+            "resume",
+            "--task",
+            task_id,
+        ]
+
+    def _checkpoint(self, task_id, source_id, started):
+        row = self.repo.task(task_id)
+        if self._interrupted:
+            raise BudgetReached("收到中断信号，检查点已保留", "INTERRUPTED")
+        if row["cancel_requested"]:
+            raise BudgetReached("收到取消请求", "CANCEL_REQUESTED")
+        if row["pause_requested"]:
+            raise BudgetReached("收到暂停请求", "PAUSE_REQUESTED")
+        if time.monotonic() - started >= self.settings.collection.max_duration_seconds:
+            raise BudgetReached("达到本次采集时间预算，请续跑")
+        counts = dict(
+            self.repo.db.execute(
+                "SELECT state,COUNT(*) FROM discovered WHERE task_id=? GROUP BY state", (task_id,)
+            )
+        )
+        run = self.repo.source_run(task_id, source_id)
+        self._progress_snapshot = {
+            "task_id": task_id,
+            "source_id": source_id,
+            "discovered": sum(counts.values()),
+            "saved": counts.get("SAVED", 0),
+            "failed": counts.get("FAILED", 0),
+            "pages": run["pages_count"],
+            "last_checkpoint": {"next_page": run["next_page"], "at": datetime.now(UTC).isoformat()},
+            "stage": getattr(self, "_request_stage", "checkpoint"),
+        }
+
+    def _network_request(self, task_id, source_id, started, url):
+        self._checkpoint(task_id, source_id, started)
+        if self.detail_limit is not None:
+            if self._request_stage == "discover":
+                if self._list_attempts >= 1:
+                    raise BudgetReached("达到有界验证的列表请求上限")
+                self._list_attempts += 1
+            else:
+                if self.detail_attempts >= self.detail_limit:
+                    raise BudgetReached("达到有界验证的详情请求上限")
+                self.detail_attempts += 1
+
+    def _resume(self, task_id: str, *, bounded_source: str | None = None) -> OperationResponse:
+        self._active_task = task_id
         task = self.repo.task(task_id)
         request = TaskRequest.model_validate_json(task["request_json"])
         if bounded_source:
@@ -105,7 +225,12 @@ class Collector:
                 update={"source_ids": [bounded_source], "max_pages": 1, "max_documents": 2}
             )
         if task["cancel_requested"]:
-            return OperationResponse(operation="collect", task_id=task_id, status="CANCELLED")
+            return OperationResponse(
+                operation="collect",
+                task_id=task_id,
+                status="CANCELLED",
+                data={"stop_reasons": ["CANCEL_REQUESTED"]},
+            )
         self.repo.set_task_state(task_id, "RUNNING")
         self.repo.audit(
             task_id,
@@ -135,8 +260,17 @@ class Collector:
                             config.allowed_hosts, settings=self.settings.network, proxy=self.proxy
                         )
                     )
+                    self._list_attempts = 0
+                    self._request_stage = "discover"
+                    client.checkpoint = lambda source_id=source_id: self._checkpoint(
+                        task_id, source_id, started
+                    )
+                    client.before_request = lambda url, source_id=source_id: self._network_request(
+                        task_id, source_id, started, url
+                    )
                     adapter: MofAdapter | ChinataxAdapter | None = None
                     try:
+                        self._checkpoint(task_id, source_id, started)
                         if source_id == "mof":
                             assert isinstance(client, BoundedClient)
                             adapter = MofAdapter(config, client)
@@ -154,16 +288,11 @@ class Collector:
                                             "缺少显示环境，请使用 xvfb-run 启动税务采集"
                                         )
                                     playwright = stack.enter_context(sync_playwright())
-                                    browser = playwright.chromium.launch(
-                                        headless=self.settings.browser.headless,
+                                    browser, _selected = launch_browser(
+                                        playwright,
+                                        self.settings.browser,
                                         proxy=browser_proxy(self.proxy),
                                         args=["--no-proxy-server"] if self.proxy is None else [],
-                                        executable_path=(
-                                            str(self.settings.browser.executable_path)
-                                            if self.settings.browser.executable_path
-                                            else None
-                                        ),
-                                        timeout=self.settings.browser.timeout_seconds * 1000,
                                     )
                                 except PlaywrightError as exc:
                                     raise RuntimeError(
@@ -200,8 +329,14 @@ class Collector:
                                 page.close()
                     except (AccessBlocked, BudgetReached, ValueError, RuntimeError) as exc:
                         if isinstance(exc, BudgetReached):
+                            self._stop_reasons.append(exc.code)
                             warnings.append(f"{source_id}: {exc}")
                             continue
+                        self._stop_reasons.append(
+                            "TRANSIENT_NETWORK"
+                            if isinstance(exc, TransientFailure)
+                            else "SOURCE_FAILURE"
+                        )
                         snapshot = getattr(adapter, "last_response", None)
                         evidence_id = None
                         if snapshot and isinstance(exc, StructureDrift):
@@ -218,11 +353,24 @@ class Collector:
             finally:
                 if browser is not None:
                     browser.close()
+        if self._interrupted:
+            self._stop_reasons.append("INTERRUPTED")
+            warnings.append("收到中断信号，检查点已保留")
+        if self.repo.task(task_id)["pause_requested"]:
+            self._stop_reasons.append("PAUSE_REQUESTED")
+            warnings.append("收到暂停请求，检查点已保留")
         runs = [self.repo.source_run(task_id, source_id) for source_id in request.source_ids]
         if self.repo.task(task_id)["cancel_requested"]:
             self.repo.set_task_state(task_id, "CANCELLED")
+            self.repo.audit(
+                task_id, "batch_stopped", {"reasons": ["CANCEL_REQUESTED"], "state": "CANCELLED"}
+            )
             return OperationResponse(
-                operation="collect", task_id=task_id, status="CANCELLED", warnings=warnings
+                operation="collect",
+                task_id=task_id,
+                status="CANCELLED",
+                warnings=warnings,
+                data={"stop_reasons": ["CANCEL_REQUESTED"]},
             )
         pending = len(self.repo.pending_decisions(task_id))
         failures = self.repo.db.execute(
@@ -242,11 +390,30 @@ class Collector:
             ).fetchone()[0]
             state = "COMPLETED_EMPTY" if count == 0 else "COMPLETED"
         self.repo.set_task_state(task_id, state)
+        counts = dict(
+            self.repo.db.execute(
+                "SELECT state,COUNT(*) FROM discovered WHERE task_id=? GROUP BY state", (task_id,)
+            )
+        )
+        if not self._stop_reasons and (failures or not complete):
+            self._stop_reasons.append("INCOMPLETE_QUEUE")
+        self.repo.audit(
+            task_id,
+            "batch_stopped",
+            {
+                "reasons": list(dict.fromkeys(self._stop_reasons)),
+                "remaining_queue": counts,
+                "state": state,
+            },
+        )
         return OperationResponse(
             operation="collect",
             task_id=task_id,
             status=state,
             data={
+                "stop_reasons": list(dict.fromkeys(self._stop_reasons)),
+                "remaining_queue": counts,
+                "resume_argv": self._resume_argv(task_id) if state == "PARTIAL" else None,
                 "pending_decisions": pending,
                 "failure_ids": self.failure_ids,
                 "processed_documents": self.processed_documents,
@@ -271,6 +438,8 @@ class Collector:
             if isinstance(exc, AccessBlocked)
             else "STRUCTURE_DRIFT"
             if isinstance(exc, StructureDrift)
+            else "TRANSIENT_NETWORK"
+            if isinstance(exc, TransientFailure)
             else "UNKNOWN"
         )
         details = {
@@ -311,24 +480,18 @@ class Collector:
         warnings: list[str],
     ) -> None:
         seen_pages: set[str] = set()
+        self._checkpoint(task_id, source_id, started)
         if isinstance(adapter, ChinataxAdapter):
             adapter.ensure_session()
         self.repo.retry_failed_refs(task_id, source_id)
         run = self.repo.source_run(task_id, source_id)
         while not run["discovery_done"]:
             self._process_refs(task_id, request, source_id, config, client, page, started, warnings)
-            if self.repo.db.execute(
-                "SELECT 1 FROM discovered WHERE task_id=? AND source_id=? AND state='FAILED'",
-                (task_id, source_id),
-            ).fetchone():
-                raise BudgetReached("来源因条目失败停止，请先诊断")
             run = self.repo.source_run(task_id, source_id)
             self._budget(started, request, run)
-            stop = self.repo.task(task_id)
-            if stop["cancel_requested"]:
-                raise BudgetReached("收到取消请求")
-            if stop["pause_requested"]:
-                raise BudgetReached("收到暂停请求")
+            self._checkpoint(task_id, source_id, started)
+            self._request_stage = "discover"
+            self._checkpoint(task_id, source_id, started)
             page_number = int(run["next_page"])
             refs, next_page, raw, media_type = adapter.discover(page_number)
             page_hash = digest(raw)
@@ -361,11 +524,7 @@ class Collector:
         for row in self.repo.pending_refs(task_id, source_id):
             run = self.repo.source_run(task_id, source_id)
             self._budget(started, request, run, check_pages=False)
-            stop = self.repo.task(task_id)
-            if stop["cancel_requested"]:
-                raise BudgetReached("收到取消请求")
-            if stop["pause_requested"]:
-                raise BudgetReached("收到暂停请求")
+            self._checkpoint(task_id, source_id, started)
             ref = DiscoveredRef.model_validate_json(row["ref_json"])
             if (
                 request.mode == "incremental"
@@ -384,9 +543,9 @@ class Collector:
                 continue
             evidence = None
             try:
+                self._request_stage = "detail"
                 if self.detail_limit is not None and self.detail_attempts >= self.detail_limit:
                     raise BudgetReached("达到有界验证的详情请求上限")
-                self.detail_attempts += 1
                 check_url(ref.url, config.allowed_hosts, self.proxy)
                 raw, final_url, media_type = client.get(ref.url)
                 check_url(final_url, config.allowed_hosts, self.proxy)
@@ -407,6 +566,7 @@ class Collector:
                 attachment_bytes = self._attachments(
                     record, config, client, warnings, remaining_bytes, started
                 )
+                self._transient_streak[source_id] = 0
                 if (
                     request.date_basis == "issued_date"
                     and record.issued_date
@@ -471,9 +631,16 @@ class Collector:
                     evidence_id=evidence.evidence_id if evidence else None,
                     ref=ref,
                 )
-                warnings.append(f"来源停止，failure_id={failure_id}")
-                break
-                warnings.append(f"{ref.url}: {exc}（failure_id={failure_id}）")
+                warnings.append(f"条目失败，failure_id={failure_id}")
+                if isinstance(exc, TransientFailure):
+                    streak = self._transient_streak.get(source_id, 0) + 1
+                    self._transient_streak[source_id] = streak
+                    if streak < self.settings.collection.consecutive_failure_limit:
+                        continue
+                    raise BudgetReached(
+                        "来源连续瞬态失败停止，请诊断后续跑", "TRANSIENT_FAILURE_LIMIT"
+                    ) from exc
+                raise BudgetReached("来源因条目失败停止，请先诊断", "SOURCE_FAILURE") from exc
 
     def _attachments(
         self,
@@ -509,12 +676,43 @@ class Collector:
                 attachment.evidence_id = evidence.evidence_id
                 attachment.download_state = "saved"
                 if urlsplit(attachment.url).path.lower().endswith(".pdf"):
-                    reader = PdfReader(io.BytesIO(raw))
-                    text = "\n".join(page.extract_text() or "" for page in reader.pages)
+                    handler = PdfWarnings()
+                    logger = logging.getLogger("pypdf")
+                    old_handlers, old_propagate = logger.handlers[:], logger.propagate
+                    logger.handlers, logger.propagate = [handler], False
+                    try:
+                        reader = PdfReader(io.BytesIO(raw))
+                        text = "\n".join(page.extract_text() or "" for page in reader.pages)
+                    finally:
+                        logger.handlers, logger.propagate = old_handlers, old_propagate
+                        if handler.messages:
+                            record.limitations.append("PDF 解析产生警告，内容完整性待复核")
+                            warnings.append(
+                                f"PDF 解析警告 {len(handler.messages)} 条；内容完整性待复核"
+                            )
+                            # Preserve full warnings as local evidence, not console noise.
+                            warning_bytes = json.dumps(
+                                handler.messages, ensure_ascii=False
+                            ).encode()
+                            warning_evidence = self.evidence.save(
+                                warning_bytes, attachment.url, final_url, "application/json"
+                            )
+                            self.repo.save_evidence(warning_evidence)
+                            self.repo.audit(
+                                self._active_task,
+                                "pdf_warnings",
+                                {
+                                    "evidence_id": warning_evidence.evidence_id,
+                                    "attachment_evidence_id": attachment.evidence_id,
+                                    "count": len(handler.messages),
+                                },
+                            )
                     attachment.text = text or None
                     attachment.extraction_state = "text" if text else "scanned"
                 else:
                     attachment.extraction_state = "unsupported"
+            except BudgetReached:
+                raise
             except (AccessBlocked, ValueError, RuntimeError, OSError) as exc:
                 attachment.download_state = (
                     "blocked" if isinstance(exc, AccessBlocked) else "failed"

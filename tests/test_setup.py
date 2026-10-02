@@ -55,6 +55,7 @@ def test_config_absent_or_invalid_kept(tmp_path, monkeypatch):
 def test_missing_browser_install_failure_no_collection(tmp_path, monkeypatch):
     root = project(tmp_path)
     monkeypatch.delenv("FTR_CONFIG", raising=False)
+    monkeypatch.setattr("ftr.browser.candidates", lambda *_: [])
     original = setup.environment_report
 
     def report(settings):
@@ -112,7 +113,8 @@ def test_shell_uses_absolute_environment_and_capability_extras(tmp_path):
         assert report["source_access_tested"] is False
         assert report["config"] == str(root / "ftr.local.yaml")
     commands = log.read_text().splitlines()
-    assert "--extra web" not in commands[0]
+    # The existing test interpreter already has Web; setup must preserve it.
+    assert "--extra web" in commands[0]
     assert "--extra web" in commands[1]
     assert "--frozen" in commands[0]
     assert str(root / ".venv") in commands[0]
@@ -127,6 +129,8 @@ def test_browser_install_then_launch_blank_page(tmp_path, monkeypatch):
     monkeypatch.delenv("FTR_CONFIG", raising=False)
     report = setup.environment_report
     calls = []
+    browser_path = tmp_path / "chromium"
+    monkeypatch.setattr("ftr.browser.candidates", lambda *_: [("chromium", browser_path)])
 
     def missing(settings):
         value = report(settings)
@@ -134,11 +138,13 @@ def test_browser_install_then_launch_blank_page(tmp_path, monkeypatch):
         return value
 
     monkeypatch.setattr(setup, "environment_report", missing)
-    monkeypatch.setattr(
-        setup.subprocess,
-        "run",
-        lambda args, **kwargs: calls.append(args) or SimpleNamespace(returncode=0),
-    )
+
+    def install(args, **kwargs):
+        calls.append(args)
+        browser_path.touch()
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(setup.subprocess, "run", install)
     import playwright.sync_api
 
     monkeypatch.setattr(
@@ -191,3 +197,82 @@ def test_missing_uv_checksum_failure_never_executes_archive(tmp_path):
     assert result.returncode == 3
     assert "校验失败" in result.stderr
     assert not (root / ".venv").exists()
+
+
+def test_explicit_invalid_browser_does_not_download(tmp_path, monkeypatch):
+    root = project(tmp_path)
+    monkeypatch.delenv("FTR_CONFIG", raising=False)
+    monkeypatch.setenv("FTR_BROWSER__EXECUTABLE_PATH", str(tmp_path / "absent"))
+    monkeypatch.setattr(
+        setup.subprocess, "run", lambda *_a, **_k: pytest.fail("显式浏览器失败不得下载替换")
+    )
+    result = setup.prepare("chinatax", root)
+    assert result["error_code"] == "BROWSER_UNAVAILABLE"
+    assert result["browser"]["launch_tested"] is True
+    assert result["source_access_tested"] is False
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX launcher; Windows uses PowerShell")
+def test_runner_isolates_python_environment_and_preserves_arguments(tmp_path):
+    root = project(tmp_path)
+    scripts = root / "scripts"
+    shutil.copytree(PROJECT / "scripts", scripts)
+    (root / "ftr.local.yaml").write_text("data_dir: ./资料\n")
+    binary = root / ".venv/bin"
+    binary.mkdir(parents=True)
+    # A probe records argv and inherited environment, without invoking the collector.
+    (binary / "python").write_text(
+        "#!/bin/sh\nexec "
+        + shlex.quote(sys.executable)
+        + ' -c \'import json,os,sys; print(json.dumps({"argv":sys.argv[1:],"home":os.environ.get("PYTHONHOME"),"path":os.environ.get("PYTHONPATH"),"cache":os.environ.get("UV_CACHE_DIR")}))\' "$@"\n'
+    )
+    (binary / "python").chmod(0o700)
+    env = {key: value for key, value in os.environ.items() if key != "FTR_CONFIG"}
+    env.update(
+        PYTHONHOME="/absent/pollution", PYTHONPATH="/absent/injection", UV_CACHE_DIR="retained"
+    )
+    result = subprocess.run(
+        ["sh", str(scripts / "run.sh"), "search", "--query", "中文 空格"],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    probe = json.loads(result.stdout)
+    assert probe["home"] is None and probe["path"] is None and probe["cache"] == "retained"
+    assert probe["argv"][-3:] == ["search", "--query", "中文 空格"]
+    assert str(root / "ftr.local.yaml") in probe["argv"]
+    assert not (root / "资料").exists()
+
+
+@pytest.mark.skipif(
+    sys.platform != "win32", reason="Windows PowerShell runtime acceptance is executed in CI"
+)
+def test_windows_runner_isolates_pollution_and_passes_config(tmp_path):
+    config = tmp_path / "配置.yaml"
+    config.write_text("data_dir: ./资料\n", encoding="utf-8")
+    env = {key: value for key, value in os.environ.items() if not key.startswith("FTR_")}
+    env.update(
+        FTR_CONFIG=str(config), PYTHONHOME="C:/absent/pollution", PYTHONPATH="C:/absent/injection"
+    )
+    command = shutil.which("pwsh")
+    assert command, "Windows CI must provide PowerShell"
+    result = subprocess.run(
+        [
+            command,
+            "-NoProfile",
+            "-NonInteractive",
+            "-File",
+            str(PROJECT / "scripts/run.ps1"),
+            "config",
+            "validate",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+    )
+    report = json.loads(result.stdout)
+    assert report["status"] == "COMPLETED"
+    assert not (tmp_path / "资料").exists()

@@ -27,6 +27,8 @@ class NetworkSettings(SettingsModel):
     proxy_url: str | None = None
     timeout_seconds: float = Field(default=30, gt=0, allow_inf_nan=False, strict=True)
     interval_seconds: float = Field(default=2, ge=0, allow_inf_nan=False, strict=True)
+    retry_attempts: int = Field(default=3, ge=1, le=5, strict=True)
+    retry_backoff_seconds: float = Field(default=1, gt=0, le=30, allow_inf_nan=False, strict=True)
     max_file_bytes: int = Field(default=50_000_000, gt=0, strict=True)
 
     @model_validator(mode="after")
@@ -76,6 +78,8 @@ class BrowserSettings(SettingsModel):
 
 
 class CollectionSettings(SettingsModel):
+    consecutive_failure_limit: int = Field(default=3, ge=1, le=10, strict=True)
+    progress_interval_seconds: float = Field(default=30, gt=0, allow_inf_nan=False, strict=True)
     max_pages: int = Field(default=1000, ge=1, le=1000, strict=True)
     max_documents: int = Field(default=1000, ge=1, le=1000, strict=True)
     max_duration_seconds: float = Field(default=1800, gt=0, allow_inf_nan=False, strict=True)
@@ -83,6 +87,9 @@ class CollectionSettings(SettingsModel):
 
 
 class WebSettings(SettingsModel):
+    startup_timeout_seconds: float = Field(
+        default=15, gt=0, le=120, allow_inf_nan=False, strict=True
+    )
     host: str = Field(default="127.0.0.1", min_length=1)
     port: int = Field(default=8765, ge=1, le=65535, strict=True)
     poll_interval_ms: int = Field(default=5000, ge=100, strict=True)

@@ -1,7 +1,7 @@
 ---
 type: project_document
 status: active
-updated_at: 2026-10-01
+updated_at: 2026-10-02
 depends_on:
   - docs/development/prd.md
   - docs/verification/acceptance-report.md
@@ -15,7 +15,7 @@ confidence: implementation_verified_locally
 
 ## 按角色开始
 
-- **使用者**：按[安装与部署](docs/guides/installation.md)安装 Python 3.13、依赖及所需浏览器；复制[配置模板](ftr.example.yaml)，查阅[参数说明](docs/guides/configuration.md)，再按[使用流程](docs/guides/usage.md)运行。迁移与故障处理见[运维手册](docs/guides/operations.md)。
+- **使用者**：按[安装与部署](docs/guides/installation.md)获取完整项目，让 AI 调用 setup 自动准备用户级环境，再按[使用流程](docs/guides/usage.md)运行；已有配置和数据会保留。迁移与故障处理见[运维手册](docs/guides/operations.md)。
 - **开发者**：从根目录运行 `uv sync --frozen --extra dev --extra web`；阅读[开发说明](docs/development/development.md)、[架构](ARCHITECTURE.md)和[回归要求](tests/REGRESSION.md)。
 - **Agent**：先读本页、[当前需求基线](docs/development/prd.md)、[验收记录](docs/verification/acceptance-report.md)和[Agent 契约](AGENTS.md)，再按任务阅读相关专题。`CONTRIBUTING.md` 提供贡献入口。
 
@@ -35,21 +35,30 @@ HTML 和文本 PDF 可提取；Word、Excel、扫描件仅保留原件并显示�
 
 ## 快速启动
 
-非技术伙伴可让宿主加载 `setup`，或在完整插件目录运行：macOS `sh scripts/setup.sh all`；Windows PowerShell `& .\scripts\setup.ps1 -Capability all`。入口补装用户级环境并返回绝对 Python/配置路径，不访问源站。仅财政部选择 mof，仅查询选择 workbench。后续用返回的 Python 加 `-m ftr.cli --config CONFIG` 调用。
+获取完整项目：使用 `git clone https://github.com/anbang278/finance-tax-policy-acquisition`，或在仓库页面选择 Code → Download ZIP 后解压。下载失败先检查网络和已配置的代理；不自动修改全局代理。源码包须包含 `pyproject.toml`、`uv.lock`、`scripts/` 和 `skills/`。
 
-`workbench` Skill 或 `ftr workbench start --open` 可启动并打开只读页面；状态与停止用 `workbench status/stop`。七个 Skill 为 controller、setup、workbench、semantic-review、research、repair、change-review。自动修复的规则范围、验证和回退见[本机规则修复](docs/guides/self-repair.md)。
-
-在仓库根目录安装并检查环境：
+让 AI 使用 `setup` Skill；手动入口为：
 
 ```sh
-uv sync --frozen --extra web
-uv run playwright install chromium
-uv run ftr doctor
+# macOS；仅财政部选 mof，仅查询选 workbench
+sh scripts/setup.sh all
+# 后续命令不重新安装依赖
+sh scripts/run.sh config validate
+sh scripts/run.sh workbench start --open
 ```
 
-配置示例与覆盖规则见[配置指南](docs/guides/configuration.md)。显式日期范围后再开始有界采集；例如 `uv run ftr collect --sources mof --date-from 2026-09-01 --date-to 2026-09-28 --max-pages 1 --max-documents 2`。完整命令、复核与引用研究流程见[使用指南](docs/guides/usage.md)。
+```powershell
+# Windows 原生 PowerShell，无需 WSL 或 Docker
+& .\scripts\setup.ps1 -Capability all
+& .\scripts\run.ps1 config validate
+& .\scripts\run.ps1 workbench start --open
+```
 
-只读工作台可用 `uv run --extra web ftr serve --port 8765` 启动，默认访问 `http://127.0.0.1:8765`。局域网监听示例、备份与恢复见[安装部署](docs/guides/installation.md)和[运维手册](docs/guides/operations.md)。
+setup 自动准备用户级 uv、Python 3.13 和锁定依赖，优先复用可启动的 Chromium、Edge、Chrome，缺浏览器时才下载 Chromium；显式浏览器路径失效则报告。报告包含环境、浏览器启动、配置/数据/运行入口及代码版本；不访问源站，也不初始化资料库。无资料库时工作台提示先采集，已有空库可正常浏览。自定义配置用 `FTR_CONFIG`，数据目录用 `FTR_DATA_DIR`；参数见[配置指南](docs/guides/configuration.md)。
+
+用户提供明确来源与起止日期后，AI 用运行入口执行有界采集，例如 `sh scripts/run.sh collect --sources mof --date-from 2026-09-01 --date-to 2026-09-28 --max-pages 1 --max-documents 2`。达到预算或中断后报告 `PARTIAL`、剩余队列与续跑入口，由用户要求续跑。进度写 stderr，最终结果保持 JSON。查询使用 `workbench` Skill；研究仍要求资料经复核。
+
+开发与 Linux Xvfb 入口、局域网监听和独立 wheel 安装见[安装部署](docs/guides/installation.md)。七个 Skill 为 controller、setup、workbench、semantic-review、research、repair、change-review；受限自修复见[本机规则修复](docs/guides/self-repair.md)。
 
 ## 能力与边界
 

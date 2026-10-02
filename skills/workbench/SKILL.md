@@ -7,10 +7,12 @@ description: 打开本机政策资料工作台，查询与下载已采集资料�
 
 用户说“打开政策库”“启动本地页面”“查看已采集政策”时使用此 Skill。先复用 setup，选择 workbench 能力，不安装税务浏览器，不发起采集。
 
-用返回的绝对 Python 与配置执行 `python -m ftr.cli --config CONFIG workbench start --open`。仅在 state=RUNNING 且有健康检查后的 data.url 时提供链接。browser_opened=false 时说明自动打开未成功，仍提供可用 URL。
+用返回的绝对 runner 执行 `workbench start --open`；直接 Python 调用时使用报告中的绝对路径和配置，并仅在子进程中隔离 PYTHONHOME/PYTHONPATH。仅在 state=RUNNING 且有健康检查后的 data.url 时提供链接。browser_opened=false 时说明自动打开未成功，仍提供可用 URL。
 
-命令默认只监听 127.0.0.1，同一数据目录已有服务则复用，8765 被占用时尝试至 8774；不终止其他程序。缺资料库时解释“尚无已采集资料”，不创建数据库或替用户采集。已有空库正常展示空页面。
+命令默认只监听 127.0.0.1，同一数据目录已有服务则复用，默认 8765 被占用时尝试至 8774，显式 web.port 则从该端口尝试至多十个端口；不终止其他程序。缺资料库时解释“尚无已采集资料”，不创建数据库或替用户采集。已有空库正常展示空页面。
 
 查询服务状态使用 `workbench status`；用户要求关闭时使用 `workbench stop`，固定程序验证服务身份后停止，不使用按端口杀进程或猜 PID 的命令。服务可在宿主会话结束后继续提供只读查询，停止方式须告知用户。
 
 现有页面支持标题/文号/正文查询、来源与质量状态筛选、原件下载和任务观察。collected/quarantined 资料不是已验证研究依据；不把库中最新说成官网最新。局域网监听必须由用户明确提出，按现有 serve 文档操作，不由此 Skill 自动启用。
+
+启动失败读取结构化错误 code、stage、port、exit_code、log_summary 与 next_step；不手写状态文件。只有端口冲突换端口，其他故障按诊断处理。任务数据库 RUNNING 不等于进程在线，活动检查只说明目录写入锁观察；隔离原因是现有限制的派生解释，不授权修改质量状态。

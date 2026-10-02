@@ -43,3 +43,14 @@ A05 按本轮确认改为“错误内容或错误分类不得通过”；合法�
 追踪入口：setup → scripts/setup.sh、setup.ps1、setup_runtime.py → tests/test_setup.py；规则闭环 → rules.py、rule_repair.py、runtime.py → tests/test_rule_repair.py；工作台 → workbench.py → tests/test_workbench_lifecycle.py。既有回归、wheel 与三平台 CI 继续执行。
 
 验收须分开记录离线故障注入、真实源站及 macOS/Windows × Codex/Hermes 会话。受控网络替身不代表真实访问成功，缺宿主/设备不能计通过。当前实现结果以 acceptance-report.md 本轮补充为准。
+
+## 首次配置与可靠性追踪（2026-10-02）
+
+| 目标 | 实施与回归 | 验收边界 |
+|---|---|---|
+| 通用自动配置 | setup/run 脚本、browser.py；test_setup.py、test_reliability.py | 模拟下载与本机启动分开；干净桌面待验证 |
+| 服务身份与诊断 | workbench.py；test_workbench_lifecycle.py、test_reliability.py | 实际子进程与包装 PID 注入；旧状态兼容 |
+| 网络失败分级 | network.py/runtime.py；test_reliability.py、test_rule_repair.py | 502/访问限制/实际重试请求限额，网络为受控替身 |
+| 进度与恢复 | runtime.py/diagnostics.py/cli.py；test_reliability.py | stderr、信号与强制退出残留、独占锁后恢复 |
+| 质量解释与历史兼容 | Web query/app.js、PDF 警告证据；test_reliability.py、test_web.py、旧备份回归 | 派生解释不改历史数据库；语义复核另验 |
+| 分发与跨系统 | 三平台 CI、verify_wheel.py | 本机 wheel 实测；新远程 CI 和桌面宿主另验 |

@@ -7,6 +7,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
+from ftr.browser import candidates
 from ftr.config import RuntimeSettings
 
 
@@ -29,12 +30,20 @@ def environment_report(settings: RuntimeSettings) -> dict[str, Any]:
             dependencies[name] = {"installed": False, "version": None}
     browser_path = settings.browser.executable_path
     driver_error = False
+    available_browsers = []
     if browser_path is None:
         try:
             from playwright.sync_api import sync_playwright
 
             with sync_playwright() as playwright:
-                browser_path = Path(playwright.chromium.executable_path)
+                available_browsers = [
+                    {"name": name, "path": str(path), "file_exists": path.is_file()}
+                    for name, path in candidates(playwright, settings.browser)
+                ]
+                browser_path = next(
+                    (Path(item["path"]) for item in available_browsers if item["file_exists"]),
+                    Path(playwright.chromium.executable_path),
+                )
         except Exception:  # noqa: BLE001
             driver_error = True
     display_available = (
@@ -56,6 +65,7 @@ def environment_report(settings: RuntimeSettings) -> dict[str, Any]:
         ),
         "browser": {
             "path": str(browser_path) if browser_path else None,
+            "candidates": available_browsers,
             "file_exists": bool(browser_path and browser_path.is_file()),
             "driver_error": driver_error,
             "launch_tested": False,

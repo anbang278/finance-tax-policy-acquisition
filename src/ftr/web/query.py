@@ -11,6 +11,7 @@ from typing import Any
 
 from ftr.adapters.common import canonical_url
 from ftr.config import load_sources
+from ftr.diagnostics import limitation_reasons, task_diagnostics
 from ftr.models import Evidence, digest
 
 LATEST = """
@@ -49,6 +50,7 @@ def document(row: sqlite3.Row, full: bool = False) -> dict[str, Any]:
         source_version=row["source_version"],
         extraction_version=row["extraction_version"],
     )
+    record["limitation_reasons"] = limitation_reasons(record.get("limitations", []))
     if not full:
         record.pop("body_text", None)
         record.pop("field_evidence", None)
@@ -96,7 +98,19 @@ class ReadQueries:
                 )
             )
             tasks = dict(db.execute("SELECT state, COUNT(*) FROM tasks GROUP BY state"))
+            reasons: Counter = Counter()
+            for row in db.execute(
+                LATEST + "SELECT record_json FROM latest WHERE quality_state='quarantined'"
+            ):
+                record = json.loads(row[0])
+                reasons.update(
+                    {item["code"] for item in limitation_reasons(record.get("limitations", []))}
+                    or {"other_historical"}
+                )
             return response(
+                quarantine_reasons=[
+                    {"code": code, "count": count} for code, count in sorted(reasons.items())
+                ],
                 policies_total=sum(quality.values()),
                 quality_counts=quality,
                 task_counts=tasks,
@@ -211,6 +225,7 @@ class ReadQueries:
             (task_id,),
         ).fetchone()
         item["last_state_at"] = last[0] if last else None
+        item.update(task_diagnostics(db, task_id, self.root))
         item["pending_decisions"] = db.execute(
             "SELECT COUNT(*) FROM decisions WHERE task_id=? AND state='PENDING'",
             (task_id,),

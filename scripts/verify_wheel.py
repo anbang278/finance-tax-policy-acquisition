@@ -6,17 +6,15 @@ import json
 import os
 import subprocess
 import tempfile
-from zipfile import ZipFile
 from pathlib import Path
+from zipfile import ZipFile
 
 project = Path(__file__).resolve().parents[1]
 wheels = sorted((project / "dist").glob("*.whl"), key=lambda p: p.stat().st_mtime)
 if not wheels:
     raise SystemExit("缺少 wheel，请先运行 uv build")
 with ZipFile(wheels[-1]) as wheel:
-    metadata_name = next(
-        name for name in wheel.namelist() if name.endswith(".dist-info/METADATA")
-    )
+    metadata_name = next(name for name in wheel.namelist() if name.endswith(".dist-info/METADATA"))
     metadata = wheel.read(metadata_name).decode("utf-8")
     assert "License-Expression: Apache-2.0" in metadata
     assert any(name.endswith(".dist-info/licenses/LICENSE") for name in wheel.namelist())
@@ -32,7 +30,7 @@ with tempfile.TemporaryDirectory(prefix="ftr-wheel-") as temporary:
     env = {
         key: value
         for key, value in os.environ.items()
-        if not key.startswith("FTR_") and key != "PYTHONPATH"
+        if not key.startswith("FTR_") and key not in ("PYTHONPATH", "PYTHONHOME")
     }
     env.update(
         PYTHONUTF8="1",
@@ -62,6 +60,12 @@ settings = load_settings()
 repo = Repository(settings.data_dir)
 repo.close()
 assert (files("ftr") / "data" / "ftr.example.yaml").is_file()
+from ftr.browser import candidates
+from ftr.diagnostics import limitation_reasons
+assert limitation_reasons(["历史限制"])[0]["code"] == "other_historical"
+assert settings.network.retry_attempts == 3
+assert settings.collection.progress_interval_seconds == 30
+assert settings.web.startup_timeout_seconds == 15
 assert (files("ftr") / "data" / "rule-fixtures.json").is_file()
 from ftr.rules import Rules, extract_listing
 import json
@@ -78,6 +82,8 @@ from ftr.workbench import manage
 try:
     assert manage(settings.data_dir, "start")["state"] == "RUNNING"
     assert manage(settings.data_dir, "status")["state"] == "RUNNING"
+    state = json.loads((settings.data_dir / ".workbench.json").read_text())
+    assert state["instance_id"] and state["launcher_pid"] and state["pid"]
 finally:
     manage(settings.data_dir, "stop")
 print("独立 wheel、打包配置模板、静态资源和只读 API：PASS")

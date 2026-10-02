@@ -32,8 +32,10 @@ jobs:
         run: |
           $tokens = $null
           $errors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path scripts/setup.ps1), [ref]$tokens, [ref]$errors) | Out-Null
-          if ($errors.Count) { throw ($errors | Out-String) }
+          foreach ($script in @('scripts/setup.ps1', 'scripts/run.ps1')) {
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script), [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count) { throw ($errors | Out-String) }
+          }
       - name: 测试与静态检查
         run: |
           uv run --extra dev --extra web pytest -q

@@ -1,5 +1,11 @@
 param([ValidateSet('mof','chinatax','workbench','all')][string]$Capability='all')
 $ErrorActionPreference = 'Stop'
+$ftrPreviousPythonHome = $env:PYTHONHOME
+$ftrPreviousPythonPath = $env:PYTHONPATH
+$ftrStage = 'bootstrap'
+$ftrReported = $false
+try {
+Remove-Item Env:PYTHONHOME, Env:PYTHONPATH -ErrorAction SilentlyContinue
 $ftrRoot = Split-Path -Parent $PSScriptRoot
 $ftrCommand = Get-Command uv -ErrorAction SilentlyContinue
 $ftrExisting = Join-Path $env:LOCALAPPDATA 'FTR\bootstrap\bin\uv.exe'
@@ -26,15 +32,31 @@ if ($ftrCommand) { $ftrUv = $ftrCommand.Source } elseif (Test-Path $ftrExisting)
         $ftrUv = Join-Path $ftrBin 'uv.exe'
     } finally { Remove-Item -Recurse -Force $ftrTemp }
 }
+$ftrStage = 'dependencies'
 $ftrPreviousEnvironment = $env:UV_PROJECT_ENVIRONMENT
 Push-Location $ftrRoot
 try {
     $env:UV_PROJECT_ENVIRONMENT = Join-Path $ftrRoot '.venv'
 
     $ftrArgs = @('sync','--frozen','--no-dev','--python','3.13')
-    if ($Capability -in @('workbench','all')) { $ftrArgs += @('--extra','web') }
+    $ftrKeepWeb = $false
+    $ftrPython = Join-Path $ftrRoot '.venv\Scripts\python.exe'
+    if (Test-Path $ftrPython) {
+        & $ftrPython -c 'import fastapi, uvicorn' 2>$null
+        $ftrKeepWeb = ($LASTEXITCODE -eq 0)
+    }
+    if ($Capability -in @('workbench','all') -or $ftrKeepWeb) { $ftrArgs += @('--extra','web') }
     & $ftrUv @ftrArgs
     if ($LASTEXITCODE -ne 0) { throw '项目环境安装失败，保留现有配置，请检查网络和依赖' }
+    $ftrStage = 'verification'
     & (Join-Path $ftrRoot '.venv\Scripts\python.exe') (Join-Path $PSScriptRoot 'setup_runtime.py') $Capability
+    $ftrReported = $true
     if ($LASTEXITCODE -ne 0) { throw '环境验证未通过，读取上方 JSON 诊断' }
 } finally { $env:UV_PROJECT_ENVIRONMENT = $ftrPreviousEnvironment; Pop-Location }
+
+} catch {
+    if (-not $ftrReported) {
+        @{ state='BLOCKED'; stage=$ftrStage; error_code='INSTALLATION_FAILED'; next_step='检查下载网络、权限与锁定依赖后重试；保留已有配置' } | ConvertTo-Json -Compress
+    }
+    throw '环境准备失败；读取诊断并保留现有配置后重试'
+} finally { $env:PYTHONHOME = $ftrPreviousPythonHome; $env:PYTHONPATH = $ftrPreviousPythonPath }

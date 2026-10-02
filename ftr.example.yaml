@@ -6,17 +6,22 @@ network:
   proxy_url: null  # explicit 时填写，如 http://127.0.0.1:7890
   timeout_seconds: 30
   interval_seconds: 2
+  retry_attempts: 3  # 每个 HTTP 请求最多尝试次数，Repair 上限优先
+  retry_backoff_seconds: 1  # 指数退避基数，另加 0–0.25 秒抖动
   max_file_bytes: 50000000
 browser:
   headless: false  # Linux 无桌面环境使用 xvfb-run，不自动切换无界面模式
-  executable_path: null  # 默认使用 Playwright 安装的 Chromium
+  executable_path: null  # 自动验证：已有 Chromium → Edge → Chrome；setup 按需下载
   timeout_seconds: 30
 collection:
+  consecutive_failure_limit: 3  # 同来源连续详情瞬态失败耗尽后停止
+  progress_interval_seconds: 30  # stderr 进度，stdout 保留最终 JSON
   max_pages: 1000  # 每来源、每次运行；新任务冻结，续跑保持任务原值
   max_documents: 1000
   max_duration_seconds: 1800  # 单次运行时间预算
   max_bytes_per_source: 500000000
 web:
+  startup_timeout_seconds: 15  # lifecycle 启动总截止时间
   host: 127.0.0.1  # 团队局域网使用 0.0.0.0 或服务器网卡 IP
   port: 8765
   poll_interval_ms: 5000
