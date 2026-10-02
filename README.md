@@ -15,6 +15,8 @@ confidence: implementation_verified_locally
 
 ## 最简使用：一句话开始采集
 
+仓库地址：https://github.com/anbang278/finance-tax-policy-acquisition
+
 前提：让具备本机终端和文件访问能力的 AI（如 Codex、Hermes）打开或克隆本仓库，然后直接发送：
 
 > 请使用这个仓库，采集 2026-09-01 至 2026-09-30 的财政部和国家税务总局公开财税资料。先按项目说明完成必要的环境初始化与检查，然后直接开始采集；只有遇到必须由我决定的问题时再询问我。完成后告诉我任务状态、采集结果和失败项，并打开工作台让我查看。
