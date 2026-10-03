@@ -1,7 +1,7 @@
 ---
 type: project_document
 status: active
-updated_at: 2026-10-02
+updated_at: 2026-10-03
 depends_on:
   - docs/development/prd.md
   - docs/verification/acceptance-report.md
@@ -99,3 +99,11 @@ setup 自动准备用户级 uv、Python 3.13 和锁定依赖，优先复用可�
 ## 工程入口
 
 仓库根目录是唯一工程与插件入口。运行代码和可信测试分别位于 `src/ftr/` 与 `tests/`；来源信任表在 `config/sources.yaml`，资料契约在 `contracts/official-material.yaml`。Codex 与 Hermes 共享 `skills/`，各自清单位于 `.codex-plugin/plugin.json` 和根 `plugin.json`。SQLite 与原件存放在运行数据目录，独立于源码与虚拟环境。
+
+## 可靠采集与结果说明（2026-10-03）
+
+每批结束后，Agent 分来源说明已获取内容、已知缺失、未读范围、原因及下一步，并分别报告范围核查、原件下载、内容可读性和复核状态。说“继续”只恢复一批；失败或预算未下载的附件也会进入恢复队列，已保存附件不重复下载。
+
+政策日期不明确时保存为空，仍可采集成功并按正常门禁复核；日期未知不等于属于指定日期区间，日期筛选会保留并标明这些资料。官网日期筛选的完整覆盖未被证明时，继续按栏目逐页核查，不能仅遇到旧日期便宣告完成。
+
+Agent 可只读调用 `task list`、`task report --task ID` 和 `task missing --task ID`，普通用户无需输入任务 ID。Office/扫描件保留原件，查看方式与解析限制分开说明。升级前报告见[体验审计](docs/verification/usability-audit-2026-10-03.md)，本轮结果见[升级复验](docs/verification/usability-upgrade-2026-10-03.md)。

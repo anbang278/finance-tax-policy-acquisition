@@ -120,8 +120,8 @@ def _links(refs, source):
             or url.port not in (None, 443)
         ):
             raise ValueError("候选生成了不可信链接")
-        if not ref.listing_title or ref.listing_date is None:
-            raise ValueError("候选条目标题或日期缺失")
+        if not ref.listing_title:
+            raise ValueError("候选条目标题缺失")
     if len({ref.url for ref in refs}) != len(refs):
         raise ValueError("候选列表存在重复链接")
 
@@ -193,7 +193,7 @@ def _test_candidate(root, repo, candidate, settings, *, live=False):
         # Only trusted Collector code performs requests; this isolated DB never changes real materials.
         from ftr.runtime import Collector
 
-        request = TaskRequest.model_validate_json(repo.task(manifest["task_id"])["request_json"])
+        request = TaskRequest.from_saved(repo.task(manifest["task_id"])["request_json"])
         request = request.model_copy(
             update={
                 "source_ids": [rules.source_id],

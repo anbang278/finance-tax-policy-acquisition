@@ -11,7 +11,7 @@ from typing import Any
 
 from ftr.adapters.common import canonical_url
 from ftr.config import load_sources
-from ftr.diagnostics import limitation_reasons, task_diagnostics
+from ftr.diagnostics import failure_explanation, limitation_reasons, task_diagnostics, task_report
 from ftr.models import Evidence, digest
 
 LATEST = """
@@ -164,7 +164,9 @@ class ReadQueries:
             params.append(document_type)
         for op, value in ((">=", date_from), ("<=", date_to)):
             if value:
-                conditions.append(f"json_extract(record_json, '$.listing_date'){op}?")
+                conditions.append(
+                    f"(json_extract(record_json, '$.listing_date'){op}? OR json_extract(record_json, '$.listing_date') IS NULL)"
+                )
                 params.append(value)
         where = " WHERE " + " AND ".join(conditions) if conditions else ""
         order = (
@@ -179,7 +181,20 @@ class ReadQueries:
                 LATEST + "SELECT * FROM latest" + where + f" ORDER BY {order} LIMIT ? OFFSET ?",
                 [*params, page_size, (page - 1) * page_size],
             ).fetchall()
-            return paginated([document(row) for row in rows], total, page, page_size)
+            result = paginated([document(row) for row in rows], total, page, page_size)
+            result["date_unknown_count"] = db.execute(
+                LATEST
+                + "SELECT COUNT(*) FROM latest"
+                + (where + " AND " if where else " WHERE ")
+                + "json_extract(record_json, '$.listing_date') IS NULL",
+                params,
+            ).fetchone()[0]
+            result["date_unknown_notice"] = (
+                "日期未知资料同时保留，无法确认是否属于指定日期区间"
+                if (date_from or date_to)
+                else "日期未知资料置后显示"
+            )
+            return result
 
     def _record(self, db: sqlite3.Connection, record_id: str) -> sqlite3.Row:
         row = db.execute("SELECT * FROM documents WHERE id=?", (record_id,)).fetchone()
@@ -226,6 +241,8 @@ class ReadQueries:
         ).fetchone()
         item["last_state_at"] = last[0] if last else None
         item.update(task_diagnostics(db, task_id, self.root))
+        item["report"] = task_report(db, task_id)
+        item["active_failure_count"] = item["report"]["active_failure_count"]
         item["pending_decisions"] = db.execute(
             "SELECT COUNT(*) FROM decisions WHERE task_id=? AND state='PENDING'",
             (task_id,),
@@ -331,6 +348,8 @@ class ReadQueries:
             for row in rows:
                 item = dict(row)
                 item["details"] = json.loads(item.pop("details_json"))
+                if item["kind"] == "failure":
+                    item["explanation"] = failure_explanation(item["event"], item["details"])
                 items.append(item)
             return paginated(items, total, page, page_size)
 

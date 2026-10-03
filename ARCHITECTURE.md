@@ -32,3 +32,9 @@ Web 为同源只读服务，默认回环；显式非回环地址允许团队局�
 网络默认三次尝试、1/2 秒基础退避加抖动；详情连续三条瞬态失败才停止，列表失败保留检查点。暂停、取消、预算和 Repair 实际请求限额约束重试。进度独立写 stderr，最终 JSON 增加停止原因、队列和续跑参数。强制中断残留只在取得独占锁后修正；查询保持只读。隔离原因由现有 limitations 派生，PDF 警告保留证据并增加内容限制，不改变旧资料状态与摘要。
 
 接口变更为 RuntimeSettings 新增五个参数、schema 增加 runtime_settings、Web 增加 quarantine_reasons/limitation_reasons/writer_activity/last_batch，无新增数据库表，不改冻结 TaskRequest。浏览器模块纳入 Repair 执行器指纹，旧验证报告需重验。实施与真实验收分别记录，详见 acceptance-report.md 本轮记录。
+
+## 体验升级补充（2026-10-03）
+
+运行数据库版本 2 增加 attachment_work 与 listing_pages；CLI 写入持独占锁并迁移，普通 Repository(readonly=True) 和 Web 只读快照不初始化、不迁移、不恢复任务。附件缺失先于列表推进恢复，补齐产生新提取版本，旧资料与复核保留。日期未知是范围信息，不是硬内容限制。
+
+diagnostics.task_report 为核心统一报告，供采集 data.report、只读 task list/report/missing 与 Web 消费。覆盖完整性、原件完整性、内容可读性与复核独立表达；失败事实脱敏后持久化，修复后保留 resolved 历史。分页记录实际请求与最终地址。未经证明的日期筛选不用于完成判定；预算后等待用户继续。

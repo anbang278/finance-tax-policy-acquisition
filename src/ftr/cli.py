@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sqlite3
 import sys
 from contextlib import closing
@@ -12,7 +11,7 @@ from pydantic import ValidationError
 
 from ftr.backup import create_backup, restore_backup, verify_backup
 from ftr.config import RuntimeSettings, load_settings, load_sources, redact_proxy
-from ftr.diagnostics import recover_interrupted, task_diagnostics
+from ftr.diagnostics import recover_interrupted, safe_message, task_diagnostics, task_report
 from ftr.environment import environment_report
 from ftr.models import OperationResponse, SemanticDecision, TaskRequest
 from ftr.network import resolve_proxy
@@ -59,7 +58,11 @@ def parser() -> argparse.ArgumentParser:
     collect.add_argument("--max-documents", type=int)
     collect.add_argument("--idempotency-key")
     task = commands.add_parser("task").add_subparsers(dest="action", required=True)
-    for action in ("status", "resume", "pause", "cancel"):
+    listing = task.add_parser("list", help="只读列出任务，供 Agent 关联当前任务")
+    listing.add_argument("--state")
+    listing.add_argument("--page", type=int, default=1)
+    listing.add_argument("--page-size", type=int, default=20)
+    for action in ("status", "report", "missing", "resume", "pause", "cancel"):
         item = task.add_parser(action)
         item.add_argument("--task", required=True)
     decision = commands.add_parser("decision").add_subparsers(dest="action", required=True)
@@ -262,8 +265,18 @@ def run(args: argparse.Namespace) -> OperationResponse:
                 data={
                     "sources": [dict(source) for source in source_rows],
                     **task_diagnostics(connection, args.task, root),
+                    "report": task_report(connection, args.task),
                 },
             )
+    readonly = (
+        args.command
+        in ("search", "document", "evidence", "candidate", "research", "export", "release")
+        or (args.command == "decision" and args.action == "list")
+        or (args.command == "repair" and args.action == "context")
+        or (args.command == "task" and args.action in ("list", "report", "missing"))
+    )
+    if readonly:
+        return read_operation(args, root)
     request = None
     if args.command == "collect":
         if args.request:
@@ -322,14 +335,6 @@ def run(args: argparse.Namespace) -> OperationResponse:
                         collector.close()
                 raise ValueError("未知任务动作")
             if args.command == "decision":
-                if args.action == "list":
-                    decisions = repo.pending_decisions(args.task)
-                    return OperationResponse(
-                        operation="decision list",
-                        task_id=args.task,
-                        status="COMPLETED",
-                        data={"decisions": [x.model_dump(mode="json") for x in decisions]},
-                    )
                 decision = SemanticDecision.model_validate_json(
                     args.file.read_text(encoding="utf-8")
                 )
@@ -339,42 +344,14 @@ def run(args: argparse.Namespace) -> OperationResponse:
                     status=record.quality_state.upper(),
                     data={"record_id": record.record_id},
                 )
-            if args.command == "search":
-                records = repo.search(args.query, args.include_limited)
-                return OperationResponse(
-                    operation="search",
-                    status="COMPLETED",
-                    data={"records": [x.model_dump(mode="json") for x in records]},
-                )
-            if args.command == "document":
-                record = repo.get_document(args.id)
-                return OperationResponse(
-                    operation="document show",
-                    status="COMPLETED",
-                    data={"record": record.model_dump(mode="json")},
-                )
-            if args.command == "evidence":
-                evidence = repo.get_evidence(args.id)
-                return OperationResponse(
-                    operation="evidence show",
-                    status="COMPLETED",
-                    data={"evidence": evidence.model_dump(mode="json")},
-                )
             if args.command == "repair":
                 from ftr.rule_repair import (
                     activate,
-                    failure_context,
                     rollback,
                     submit,
                     test_candidate,
                 )
 
-                if args.action == "context":
-                    return OperationResponse(
-                        operation="repair context",
-                        status="COMPLETED",
-                        data=failure_context(repo, args.failure),
-                    )
                 if args.action == "propose-rule":
                     result = submit(root, repo, args.failure, args.file)
                     return OperationResponse(
@@ -411,64 +388,139 @@ def run(args: argparse.Namespace) -> OperationResponse:
                 return OperationResponse(
                     operation="repair prepare", status="PATCH_PROPOSED", data=candidate
                 )
-            if args.command == "candidate":
-                markdown = candidate_report(root, args.candidate)
-                return OperationResponse(
-                    operation="candidate report", status="COMPLETED", data={"markdown": markdown}
-                )
-            if args.command == "research":
-                if args.action == "prepare":
-                    records = repo.search(args.query)
-                    return OperationResponse(
-                        operation="research prepare",
-                        status="COMPLETED",
-                        data={
-                            "query": args.query,
-                            "records": [x.model_dump(mode="json") for x in records],
-                            "warning": "仅验证资料入选；陈述支持关系仍须语义复核",
-                        },
-                    )
-                draft = ResearchDraft.model_validate_json(args.file.read_text(encoding="utf-8"))
-                result = verify_and_render(repo, draft)
-                return OperationResponse(
-                    operation="research submit", status="COMPLETED", data={"markdown": result}
-                )
-            if args.command == "export":
-                if args.output.exists():
-                    raise FileExistsError("导出目标已存在")
-                records = repo.search(args.query)
-                args.output.parent.mkdir(parents=True, exist_ok=True)
-                with args.output.open("x", encoding="utf-8") as handle:
-                    for record in records:
-                        handle.write(
-                            json.dumps(record.model_dump(mode="json"), ensure_ascii=False) + "\n"
-                        )
-                return OperationResponse(
-                    operation="export",
-                    status="COMPLETED",
-                    data={"output": str(args.output), "count": len(records), "format": "jsonl"},
-                )
             if args.command == "backup":
                 backup_result = create_backup(root, args.output)
                 return OperationResponse(
                     operation=f"backup {args.action}", status="COMPLETED", data=backup_result
                 )
-            if args.command == "release":
-                return OperationResponse(
-                    operation="release status",
-                    status="BLOCKED",
-                    data={"adapter": args.adapter, "mode": "local-demo"},
-                    errors=[
-                        {
-                            "code": "NO_RELEASE_MANAGER",
-                            "message": "正式发布器尚未实施",
-                            "retryable": False,
-                        }
-                    ],
-                )
             raise ValueError("未知命令")
         finally:
             repo.close()
+
+
+def read_operation(args, root):
+    """Query paths do not initialize, migrate, lock or recover the database."""
+    if args.command == "release":
+        return OperationResponse(
+            operation="release status",
+            status="BLOCKED",
+            data={"adapter": args.adapter, "mode": "local-demo"},
+            errors=[
+                {"code": "NO_RELEASE_MANAGER", "message": "正式发布器尚未实施", "retryable": False}
+            ],
+        )
+    if args.command == "candidate":
+        return OperationResponse(
+            operation="candidate report",
+            status="COMPLETED",
+            data={"markdown": candidate_report(root, args.candidate)},
+        )
+    repo = Repository(root, readonly=True)
+    try:
+        if args.command == "task":
+            if args.action == "list":
+                if args.page < 1 or not 1 <= args.page_size <= 100:
+                    raise ValueError("分页参数无效")
+                where, params = (" WHERE state=?", [args.state]) if args.state else ("", [])
+                total = repo.db.execute("SELECT COUNT(*) FROM tasks" + where, params).fetchone()[0]
+                rows = repo.db.execute(
+                    "SELECT id FROM tasks"
+                    + where
+                    + " ORDER BY created_at DESC,id LIMIT ? OFFSET ?",
+                    [*params, args.page_size, (args.page - 1) * args.page_size],
+                ).fetchall()
+                return OperationResponse(
+                    operation="task list",
+                    status="COMPLETED",
+                    data={
+                        "items": [task_report(repo.db, row[0]) for row in rows],
+                        "total": total,
+                        "page": args.page,
+                        "page_size": args.page_size,
+                    },
+                )
+            report = task_report(repo.db, args.task)
+            data = (
+                report
+                if args.action == "report"
+                else {
+                    "items": report["missing_items"],
+                    "failures": report["failures"],
+                    "unseen_matches": report["unseen_matches"],
+                    "next_step": report["next_step"],
+                }
+            )
+            return OperationResponse(
+                operation=f"task {args.action}",
+                task_id=args.task,
+                status=report["state"],
+                data=data,
+            )
+        if args.command == "decision":
+            return OperationResponse(
+                operation="decision list",
+                task_id=args.task,
+                status="COMPLETED",
+                data={
+                    "decisions": [
+                        x.model_dump(mode="json") for x in repo.pending_decisions(args.task)
+                    ]
+                },
+            )
+        if args.command == "document":
+            return OperationResponse(
+                operation="document show",
+                status="COMPLETED",
+                data={"record": repo.get_document(args.id).model_dump(mode="json")},
+            )
+        if args.command == "evidence":
+            return OperationResponse(
+                operation="evidence show",
+                status="COMPLETED",
+                data={"evidence": repo.get_evidence(args.id).model_dump(mode="json")},
+            )
+        if args.command == "repair":
+            from ftr.rule_repair import failure_context
+
+            return OperationResponse(
+                operation="repair context",
+                status="COMPLETED",
+                data=failure_context(repo, args.failure),
+            )
+        if args.command == "research" and args.action == "submit":
+            draft = ResearchDraft.model_validate_json(args.file.read_text(encoding="utf-8"))
+            return OperationResponse(
+                operation="research submit",
+                status="COMPLETED",
+                data={"markdown": verify_and_render(repo, draft)},
+            )
+        records = repo.search(args.query, getattr(args, "include_limited", False))
+        if args.command == "export":
+            if args.output.exists():
+                raise FileExistsError("导出目标已存在")
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            with args.output.open("x", encoding="utf-8") as handle:
+                for record in records:
+                    handle.write(record.model_dump_json() + "\n")
+            return OperationResponse(
+                operation="export",
+                status="COMPLETED",
+                data={"output": str(args.output), "count": len(records), "format": "jsonl"},
+            )
+        return OperationResponse(
+            operation="research prepare" if args.command == "research" else "search",
+            status="COMPLETED",
+            data={
+                "records": [x.model_dump(mode="json") for x in records],
+                **(
+                    {"query": args.query, "warning": "仅验证资料入选；陈述支持关系仍须语义复核"}
+                    if args.command == "research"
+                    else {}
+                ),
+            },
+        )
+    finally:
+        repo.close()
 
 
 def main() -> None:
@@ -481,22 +533,55 @@ def main() -> None:
     try:
         result = run(args)
         code = 0 if result.status != "BLOCKED" else 3
-    except (ValueError, KeyError, FileNotFoundError, ValidationError) as exc:
-        result = OperationResponse(
-            operation=args.command,
-            status="FAILED",
-            errors=[{"code": "INPUT_ERROR", "message": str(exc), "retryable": False}],
-        )
-        code = 2
-    except Exception as exc:  # noqa: BLE001
+    except ValidationError as exc:
+        messages = [
+            f"{'.'.join(map(str, e['loc']))}: {e['msg']}"
+            for e in exc.errors(include_input=False, include_context=False)
+        ]
         result = OperationResponse(
             operation=args.command,
             status="FAILED",
             errors=[
                 {
-                    "code": getattr(exc, "details", {}).get("code", "EXECUTION_ERROR"),
-                    "message": str(exc),
+                    "code": "INPUT_ERROR",
+                    "message": safe_message("；".join(messages)),
+                    "retryable": False,
+                    "next_step": "Agent 按 schema 修正字段；sources 应为 source_ids，不扩大来源范围。",
+                }
+            ],
+        )
+        code = 2
+    except (ValueError, KeyError, FileNotFoundError) as exc:
+        result = OperationResponse(
+            operation=args.command,
+            status="FAILED",
+            errors=[
+                {
+                    "code": "INPUT_ERROR",
+                    "message": safe_message(exc),
+                    "retryable": False,
+                    "next_step": "Agent 检查输入和所选资料目录；需要补充或纠正来源/日期时简短澄清，不自动扩大范围。",
+                }
+            ],
+        )
+        code = 2
+    except Exception as exc:  # noqa: BLE001
+        details = getattr(exc, "details", {})
+        locked = "数据目录正由另一宿主使用" in str(exc)
+        next_step = details.get("next_step") or (
+            "等待当前写入任务结束后说“继续”，由 Agent 重试原任务；不要删除锁文件或终止其他宿主。"
+            if locked
+            else "Agent 查看实际错误和环境检查；确认原因与恢复条件后再重试，未启动任务时不宣称已经采集。"
+        )
+        result = OperationResponse(
+            operation=args.command,
+            status="FAILED",
+            errors=[
+                {
+                    "code": details.get("code", "DATA_LOCKED" if locked else "EXECUTION_ERROR"),
+                    "message": safe_message(exc),
                     "retryable": True,
+                    "next_step": next_step,
                 }
             ],
             data=getattr(exc, "details", {}),

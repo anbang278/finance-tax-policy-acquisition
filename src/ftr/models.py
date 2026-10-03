@@ -6,7 +6,7 @@ from hashlib import sha256
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 def utc_now() -> datetime:
@@ -35,6 +35,18 @@ def default_sources() -> list[Literal["mof", "chinatax"]]:
 
 
 class TaskRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    @classmethod
+    def from_saved(cls, value: str) -> TaskRequest:
+        """Legacy reads keep the original serialized request/digest untouched."""
+        import json
+
+        payload = json.loads(value)
+        return cls.model_validate(
+            {key: item for key, item in payload.items() if key in cls.model_fields}
+        )
+
     schema_version: Literal["1.0"] = "1.0"
     query: str = ""
     source_ids: list[Literal["mof", "chinatax"]] = Field(default_factory=default_sources)
@@ -110,6 +122,7 @@ class DocumentRecord(BaseModel):
     quality_state: Literal["collected", "validated", "quarantined", "rejected"] = "collected"
     limitations: list[str] = Field(default_factory=list)
     field_evidence: dict[str, str] = Field(default_factory=dict)
+    date_range_status: Literal["within_range", "unknown"] = "unknown"
 
 
 class DecisionRequest(BaseModel):

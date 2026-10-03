@@ -151,6 +151,20 @@ def create_app(data_dir: Path, settings: WebSettings | None = None) -> FastAPI:
     def task(task_id: str) -> dict:
         return queries.task(task_id)
 
+    @app.get("/api/tasks/{task_id}/report")
+    def report(task_id: str) -> dict:
+        return response(report=queries.task(task_id)["item"]["report"])
+
+    @app.get("/api/tasks/{task_id}/missing")
+    def missing(task_id: str) -> dict:
+        report = queries.task(task_id)["item"]["report"]
+        return response(
+            items=report["missing_items"],
+            failures=report["failures"],
+            unseen_matches=report["unseen_matches"],
+            next_step=report["next_step"],
+        )
+
     @app.get("/api/tasks/{task_id}/items")
     def items(
         task_id: str,

@@ -25,6 +25,7 @@ from ftr.adapters.common import canonical_url, parse_detail
 from ftr.adapters.mof import MofAdapter
 from ftr.browser import launch_browser
 from ftr.config import RuntimeSettings, SourceConfig, load_sources, redact_proxy
+from ftr.diagnostics import safe_message, safe_url, task_report
 from ftr.evidence import EvidenceStore
 from ftr.models import (
     DecisionRequest,
@@ -33,6 +34,7 @@ from ftr.models import (
     OperationResponse,
     TaskRequest,
     digest,
+    new_id,
 )
 from ftr.network import (
     AccessBlocked,
@@ -122,6 +124,10 @@ class Collector:
         finished = threading.Event()
         self._interrupted = False
         self._stop_reasons = []
+        self.failure_ids = []
+        self.processed_documents = 0
+        self.incomplete_documents = 0
+        self.detail_attempts = 0
         self._transient_streak = {}
         self._progress_started = time.monotonic()
         self._progress_snapshot = {"task_id": task_id, "stage": "starting"}
@@ -141,7 +147,11 @@ class Collector:
                 operation="collect",
                 task_id=task_id,
                 status="PARTIAL",
-                data={"stop_reasons": ["INTERRUPTED"], "resume_argv": self._resume_argv(task_id)},
+                data={
+                    "stop_reasons": ["INTERRUPTED"],
+                    "resume_argv": self._resume_argv(task_id),
+                    "report": task_report(self.repo.db, task_id),
+                },
             )
         finally:
             finished.set()
@@ -206,6 +216,7 @@ class Collector:
 
     def _network_request(self, task_id, source_id, started, url):
         self._checkpoint(task_id, source_id, started)
+        self._last_request_url = url
         if self.detail_limit is not None:
             if self._request_stage == "discover":
                 if self._list_attempts >= 1:
@@ -219,7 +230,7 @@ class Collector:
     def _resume(self, task_id: str, *, bounded_source: str | None = None) -> OperationResponse:
         self._active_task = task_id
         task = self.repo.task(task_id)
-        request = TaskRequest.model_validate_json(task["request_json"])
+        request = TaskRequest.from_saved(task["request_json"])
         if bounded_source:
             request = request.model_copy(
                 update={"source_ids": [bounded_source], "max_pages": 1, "max_documents": 2}
@@ -229,7 +240,10 @@ class Collector:
                 operation="collect",
                 task_id=task_id,
                 status="CANCELLED",
-                data={"stop_reasons": ["CANCEL_REQUESTED"]},
+                data={
+                    "stop_reasons": ["CANCEL_REQUESTED"],
+                    "report": task_report(self.repo.db, task_id),
+                },
             )
         self.repo.set_task_state(task_id, "RUNNING")
         self.repo.audit(
@@ -262,6 +276,7 @@ class Collector:
                     )
                     self._list_attempts = 0
                     self._request_stage = "discover"
+                    self._last_request_url = config.entry
                     client.checkpoint = lambda source_id=source_id: self._checkpoint(
                         task_id, source_id, started
                     )
@@ -347,7 +362,9 @@ class Collector:
                         failure_id = self._failure(
                             task_id, source_id, exc, "discover", evidence_id=evidence_id
                         )
-                        warnings.append(f"{source_id}: {exc}（failure_id={failure_id}）")
+                        warnings.append(
+                            f"{source_id}: {safe_message(exc)}（failure_id={failure_id}）"
+                        )
                     finally:
                         client.close()
             finally:
@@ -370,13 +387,19 @@ class Collector:
                 task_id=task_id,
                 status="CANCELLED",
                 warnings=warnings,
-                data={"stop_reasons": ["CANCEL_REQUESTED"]},
+                data={
+                    "stop_reasons": ["CANCEL_REQUESTED"],
+                    "report": task_report(self.repo.db, task_id),
+                },
             )
         pending = len(self.repo.pending_decisions(task_id))
         failures = self.repo.db.execute(
             "SELECT COUNT(*) FROM discovered WHERE task_id=? AND state='FAILED'", (task_id,)
         ).fetchone()[0]
-        complete = all(
+        attachments_pending = self.repo.db.execute(
+            "SELECT COUNT(*) FROM attachment_work WHERE task_id=? AND state='PENDING'", (task_id,)
+        ).fetchone()[0]
+        complete = not attachments_pending and all(
             row["discovery_done"] and not self.repo.pending_refs(task_id, row["source_id"])
             for row in runs
         )
@@ -411,6 +434,8 @@ class Collector:
             task_id=task_id,
             status=state,
             data={
+                "report": task_report(self.repo.db, task_id),
+                "pending_attachments": attachments_pending,
                 "stop_reasons": list(dict.fromkeys(self._stop_reasons)),
                 "remaining_queue": counts,
                 "resume_argv": self._resume_argv(task_id) if state == "PARTIAL" else None,
@@ -431,7 +456,9 @@ class Collector:
             warnings=warnings,
         )
 
-    def _failure(self, task_id, source_id, exc, stage, *, evidence_id=None, ref=None):
+    def _failure(self, task_id, source_id, exc, stage, *, evidence_id=None, ref=None, url=None):
+        import re
+
         run = self.repo.source_run(task_id, source_id)
         category = (
             "ACCESS_RESTRICTED"
@@ -440,17 +467,28 @@ class Collector:
             if isinstance(exc, StructureDrift)
             else "TRANSIENT_NETWORK"
             if isinstance(exc, TransientFailure)
+            else "BROWSER_ERROR"
+            if "浏览器" in str(exc) or "显示环境" in str(exc)
             else "UNKNOWN"
         )
+        status = re.search(r"HTTP[ :：]*(\d{3})", str(exc))
+        failure_url = url or (ref.url if ref else getattr(self, "_last_request_url", None))
         details = {
+            "url_digest": digest(failure_url.encode()) if failure_url else None,
+            "request_url": safe_url(getattr(self, "_last_request_url", None)),
+            "message": safe_message(exc),
+            "http_status": int(status[1]) if status else None,
+            "url": safe_url(url or (ref.url if ref else getattr(self, "_last_request_url", None))),
+            "cause_type": type(exc.__cause__).__name__ if exc.__cause__ else None,
+            "resolved": False,
             "stage": stage,
             "page": run["next_page"],
             "evidence_id": evidence_id,
             "rule_version": self.rules[source_id].version,
             "response": {"sha256": evidence_id},
-            "expected": "列表含标题/官方链接/日期出处且分页前进；正文与标题可靠定位",
+            "expected": "列表含标题/官方链接，日期有出处或明确为空，分页前进；正文与标题可靠定位",
             "error_type": type(exc).__name__,
-            "ref": ref.model_dump(mode="json") if ref else None,
+            "ref": {**ref.model_dump(mode="json"), "url": safe_url(ref.url)} if ref else None,
         }
         failure_id = self.repo.add_failure(task_id, source_id, category, details)
         self.failure_ids.append(failure_id)
@@ -479,10 +517,18 @@ class Collector:
         started: float,
         warnings: list[str],
     ) -> None:
-        seen_pages: set[str] = set()
+        seen_pages = {
+            row[0]
+            for row in self.repo.db.execute(
+                "SELECT evidence_id FROM listing_pages WHERE task_id=? AND source_id=?",
+                (task_id, source_id),
+            )
+        }
         self._checkpoint(task_id, source_id, started)
         if isinstance(adapter, ChinataxAdapter):
             adapter.ensure_session()
+        self.repo.rebuild_attachment_work(task_id, source_id)
+        self._recover_attachments(task_id, request, source_id, config, client, started, warnings)
         self.repo.retry_failed_refs(task_id, source_id)
         run = self.repo.source_run(task_id, source_id)
         while not run["discovery_done"]:
@@ -502,11 +548,27 @@ class Collector:
             seen_pages.add(page_hash)
             listing_url = adapter.list_url if isinstance(adapter, ChinataxAdapter) else config.entry
             assert listing_url is not None
-            listing_evidence = self.evidence.save(raw, listing_url, listing_url, media_type)
+            snapshot = getattr(adapter, "last_response", None)
+            final_listing_url = snapshot[1] if snapshot else listing_url
+            listing_url = getattr(adapter, "last_request_url", None) or listing_url
+            listing_evidence = self.evidence.save(raw, listing_url, final_listing_url, media_type)
             self.repo.save_evidence(listing_evidence)
             for ref in refs:
                 ref.discovered_from = listing_evidence.evidence_id
+            self.repo.db.execute(
+                "INSERT OR REPLACE INTO listing_pages(task_id,source_id,page,evidence_id,request_url,final_url) VALUES(?,?,?,?,?,?)",
+                (
+                    task_id,
+                    source_id,
+                    page_number,
+                    listing_evidence.evidence_id,
+                    listing_url,
+                    final_listing_url,
+                ),
+            )
             self.repo.save_page(task_id, source_id, refs, next_page)
+            self.repo.resolve_failures(task_id, source_id, "discover", listing_url)
+            self.repo.resolve_failures(task_id, source_id, "discover", config.entry)
             run = self.repo.source_run(task_id, source_id)
         self._process_refs(task_id, request, source_id, config, client, page, started, warnings)
 
@@ -588,41 +650,23 @@ class Collector:
                     if request.date_basis == "issued_date"
                     else record.published_date
                 )
-                if selected_date is None:
-                    record.limitations.append("筛选日期缺失，范围待确认")
+                record.date_range_status = "within_range" if selected_date else "unknown"
                 if not record.title or not record.body_text:
                     record.limitations.append("标题或正文缺失")
-                record.quality_state = "quarantined" if record.limitations else "collected"
-                self.processed_documents += 1
-                self.incomplete_documents += bool(record.limitations)
-                record_id, created = self.repo.add_document(task_id, record)
-                if created and not record.limitations:
-                    input_digest = digest(record.model_dump_json().encode())
-                    primary_text = "\n".join(
-                        attachment.text or ""
-                        for attachment in record.attachments
-                        if attachment.content_role == "primary"
-                        and attachment.extraction_state == "text"
-                    )
-                    self.repo.add_decision(
-                        DecisionRequest(
-                            task_id=task_id,
-                            record_id=record_id,
-                            input_digest=input_digest,
-                            excerpt=(record.body_text + "\n" + primary_text)[:1500],
-                            evidence_id=record.evidence_id,
-                        )
-                    )
+                self._save_record(task_id, record)
+                self.repo.resolve_failures(task_id, source_id, "detail", ref.url)
                 self.repo.set_ref_state(task_id, source_id, ref.url, "SAVED")
                 self.repo.db.execute(
                     "UPDATE source_runs SET bytes_count=bytes_count+? WHERE task_id=? AND source_id=?",
                     (len(raw) + attachment_bytes, task_id, source_id),
                 )
                 self.repo.db.commit()
+                if self._attachment_stop is not None:
+                    raise self._attachment_stop
             except BudgetReached:
                 raise
             except (AccessBlocked, ValueError, RuntimeError) as exc:
-                self.repo.set_ref_state(task_id, source_id, ref.url, "FAILED", str(exc))
+                self.repo.set_ref_state(task_id, source_id, ref.url, "FAILED", safe_message(exc))
                 failure_id = self._failure(
                     task_id,
                     source_id,
@@ -642,6 +686,72 @@ class Collector:
                     ) from exc
                 raise BudgetReached("来源因条目失败停止，请先诊断", "SOURCE_FAILURE") from exc
 
+    def _save_record(self, task_id, record, *, base_record_id=None):
+        record.quality_state = "quarantined" if record.limitations else "collected"
+        self.processed_documents += 1
+        self.incomplete_documents += bool(record.limitations)
+        record_id, created = self.repo.add_document(task_id, record, base_record_id=base_record_id)
+        stored = self.repo.get_document(record_id)
+        # A crash between document and decision must not lose the review work item.
+        exists = self.repo.db.execute(
+            "SELECT 1 FROM decisions WHERE record_id=?", (record_id,)
+        ).fetchone()
+        if not stored.limitations and stored.quality_state == "collected" and not exists:
+            primary_text = "\n".join(
+                att.text or ""
+                for att in stored.attachments
+                if att.content_role == "primary" and att.extraction_state == "text"
+            )
+            self.repo.add_decision(
+                DecisionRequest(
+                    task_id=task_id,
+                    record_id=record_id,
+                    input_digest=digest(
+                        self.repo.db.execute(
+                            "SELECT record_json FROM documents WHERE id=?", (record_id,)
+                        )
+                        .fetchone()[0]
+                        .encode()
+                    ),
+                    excerpt=(stored.body_text + "\n" + primary_text)[:1500],
+                    evidence_id=stored.evidence_id,
+                )
+            )
+        return record_id, created
+
+    def _recover_attachments(self, task_id, request, source_id, config, client, started, warnings):
+        for original in self.repo.pending_attachment_records(task_id, source_id):
+            run = self.repo.source_run(task_id, source_id)
+            self._budget(started, request, run, check_pages=False)
+            self._checkpoint(task_id, source_id, started)
+            record = original.model_copy(deep=True, update={"record_id": new_id()})
+            key = {
+                "source_listing": "listing_date",
+                "issued_date": "issued_date",
+                "published_date": "published_date",
+            }[request.date_basis]
+            record.date_range_status = (
+                "within_range" if getattr(record, key) is not None else "unknown"
+            )
+            before = self.repo._material_digest(record)
+            remaining = self.settings.collection.max_bytes_per_source - (
+                run["bytes_count"] - self._budget_baseline[source_id]["bytes_count"]
+            )
+            self._request_stage = "attachment"
+            downloaded = self._attachments(record, config, client, warnings, remaining, started)
+            if self.repo._material_digest(record) != before:
+                self._save_record(task_id, record, base_record_id=original.record_id)
+            self.repo.db.execute(
+                "UPDATE source_runs SET bytes_count=bytes_count+? WHERE task_id=? AND source_id=?",
+                (downloaded, task_id, source_id),
+            )
+            self.repo.db.commit()
+            if self._attachment_stop is not None:
+                raise self._attachment_stop
+        # Do not advance discovery while known missing originals remain.
+        if self.repo.pending_attachment_records(task_id, source_id):
+            raise BudgetReached("仍有附件未保存，请按失败详情处理后续跑", "INCOMPLETE_ATTACHMENTS")
+
     def _attachments(
         self,
         record: DocumentRecord,
@@ -652,7 +762,17 @@ class Collector:
         started: float,
     ) -> int:
         downloaded_bytes = 0
+        self._attachment_stop = None
+        generated = {
+            "筛选日期缺失，范围待确认",
+            "部分附件未保存",
+            "主附件原件已登记，但内容尚未解析",
+            "主内容可能位于未解析附件",
+        }
+        record.limitations = [item for item in record.limitations if item not in generated]
         for attachment in record.attachments:
+            if attachment.download_state == "saved" and attachment.evidence_id:
+                continue
             try:
                 if (
                     remaining_bytes <= 0
@@ -661,14 +781,20 @@ class Collector:
                     attachment.download_state = "blocked"
                     attachment.extraction_state = "pending"
                     warnings.append(f"附件 {attachment.url}: 达到任务预算")
-                    continue
+                    self._attachment_stop = BudgetReached("附件达到本批预算，请续跑")
+                    break
+                self._request_stage = "attachment"
                 check_url(attachment.url, config.allowed_hosts, self.proxy)
                 raw, final_url, media_type = client.get(attachment.url)
+                check_url(final_url, config.allowed_hosts, self.proxy)
                 if len(raw) > remaining_bytes:
                     attachment.download_state = "blocked"
                     attachment.extraction_state = "pending"
                     warnings.append(f"附件 {attachment.url}: 达到任务下载预算")
-                    continue
+                    self._attachment_stop = BudgetReached(
+                        "附件超过剩余下载预算，请续跑或调整运行预算"
+                    )
+                    break
                 evidence = self.evidence.save(raw, attachment.url, final_url, media_type)
                 self.repo.save_evidence(evidence)
                 remaining_bytes -= len(raw)
@@ -711,16 +837,35 @@ class Collector:
                     attachment.extraction_state = "text" if text else "scanned"
                 else:
                     attachment.extraction_state = "unsupported"
-            except BudgetReached:
-                raise
+                self.repo.resolve_failures(
+                    self._active_task, record.source_id, "attachment", attachment.url
+                )
+            except BudgetReached as exc:
+                self._attachment_stop = exc
+                break
             except (AccessBlocked, ValueError, RuntimeError, OSError) as exc:
                 attachment.download_state = (
-                    "blocked" if isinstance(exc, AccessBlocked) else "failed"
+                    "saved"
+                    if attachment.evidence_id
+                    else "blocked"
+                    if isinstance(exc, AccessBlocked)
+                    else "failed"
                 )
                 attachment.extraction_state = "failed"
-                warnings.append(f"附件 {attachment.url}: {exc}")
+                failure_id = self._failure(
+                    self._active_task,
+                    record.source_id,
+                    exc,
+                    "attachment_extraction" if attachment.evidence_id else "attachment",
+                    evidence_id=attachment.evidence_id,
+                    url=attachment.url,
+                )
+                warnings.append(f"附件失败，failure_id={failure_id}")
                 if isinstance(exc, AccessBlocked):
-                    raise
+                    self._attachment_stop = BudgetReached(
+                        "来源限制附件访问，停止该来源", "SOURCE_FAILURE"
+                    )
+                    break
         if any(att.download_state != "saved" for att in record.attachments):
             record.limitations.append("部分附件未保存")
         if any(

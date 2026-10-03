@@ -54,3 +54,17 @@ A05 按本轮确认改为“错误内容或错误分类不得通过”；合法�
 | 进度与恢复 | runtime.py/diagnostics.py/cli.py；test_reliability.py | stderr、信号与强制退出残留、独占锁后恢复 |
 | 质量解释与历史兼容 | Web query/app.js、PDF 警告证据；test_reliability.py、test_web.py、旧备份回归 | 派生解释不改历史数据库；语义复核另验 |
 | 分发与跨系统 | 三平台 CI、verify_wheel.py | 本机 wheel 实测；新远程 CI 和桌面宿主另验 |
+
+## 体验审计整改追踪（2026-10-03）
+
+| 缺陷/目标 | 实施 | 验证 |
+|---|---|---|
+| D-01 附件恢复/新版本 | repository/runtime attachment_work 与版本摘要 | test_usability_upgrade 跨实例、混合附件、预算/403/取消/旧队列 |
+| D-02 完整性与效率 | listing_pages 检查点、持久原件、report 未读范围 | 置顶/乱序/空日期/边界/续跑；官方筛选尚未证明，效率 PARTIAL |
+| D-03 失败解释 | diagnostics/runtime、Web 中文报告及事件 | 429/403/超时/浏览器/未知、脱敏、实际浏览器 |
+| D-04 范围保护 | TaskRequest extra forbid、from_saved 历史读取 | 错字段无写入、旧请求原摘要保持 |
+| D-05 复核状态 | submit_decision 显式映射 | PASS/REJECT/UNCERTAIN、幂等/错误摘要、研究排除 |
+| D-06 每批等待 | Controller/Repair 统一规则 | 专家契约走查；独立模型未测 |
+| D-07 普通只读 | Repository readonly、CLI read_operation | 写锁/残留 RUNNING 下读取字节不变 |
+| D-08 分页证据 | MofAdapter 实际请求、runtime 最终响应 | 跨批分页 URL、真实三页元数据 |
+| 空日期可采集 | 非硬限制、查询保留未知分组 | 空日期 collected/待复核、筛选仍可见 |

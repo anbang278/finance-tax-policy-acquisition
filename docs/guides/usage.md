@@ -150,3 +150,17 @@ SIGINT/SIGTERM 登记中断意图，在检查点以 PARTIAL 收束；外部强�
 Web 概览 quarantine_reasons 按最新隔离资料统计原因代码；详情 limitation_reasons 包含 code/label/original。多原因资料可计入多项，历史未知原因保留原文。任务接口增加 writer_activity 与 last_batch（停止原因与记录时间）。派生解释不改变资料 JSON、摘要、日期和复核状态。
 
 PDF 警告汇总到结果 warnings，完整警告保存为证据并通过 pdf_warnings 审计绑定原附件；有警告的资料增加内容完整性待复核限制，不自动视为解析完整。
+
+## 查看还差什么与恢复（2026-10-03）
+
+普通用户可直接说“继续”“还差什么”“为什么没采到”“打开看看”。Agent 记录当前任务，存在歧义时只按来源与日期作选择；以下命令由 Agent 执行：
+
+```sh
+ftr task list --page 1 --page-size 20
+ftr task report --task ID
+ftr task missing --task ID
+```
+
+这三个入口及 search/document/evidence/decision list/research 查询均只读，不初始化数据库、不修正任务。报告列出已知条目与附件缺失、脱敏失败原因和处理建议；未读匹配数量 null 表示未知，不能解释为零。附件下载失败或预算未取可说“继续”补齐；已保存但不支持解析的 Office/扫描件请下载原件，重复采集不会补出解析能力。
+
+缺日期资料仍允许采集，日期为空；日期筛选中保留未知分组，区间归属待确认。不能把四项中的任意一项成功等同全部完成：范围核查、已发现原件下载、内容可读性、语义复核分别显示。

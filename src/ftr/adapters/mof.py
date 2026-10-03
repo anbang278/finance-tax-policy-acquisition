@@ -26,6 +26,7 @@ class MofAdapter:
             if page_number == 1
             else urljoin(self.config.entry, self.rules.page_template.format(index=page_number - 1))
         )
+        self.last_request_url = page_url
         raw, final_url, media_type = self.client.get(page_url)
         self.last_response = (raw, final_url, media_type, page_number)
         from ftr.rules import extract_listing

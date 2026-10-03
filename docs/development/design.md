@@ -76,3 +76,15 @@ Web 默认回环监听，显式非回环监听时允许局域网 Host；不增�
 网络默认三次尝试、1/2 秒基础退避加抖动；详情连续三条瞬态失败才停止，列表失败保留检查点。暂停、取消、预算和 Repair 实际请求限额约束重试。进度独立写 stderr，最终 JSON 增加停止原因、队列和续跑参数。强制中断残留只在取得独占锁后修正；查询保持只读。隔离原因由现有 limitations 派生，PDF 警告保留证据并增加内容限制，不改变旧资料状态与摘要。
 
 接口变更为 RuntimeSettings 新增五个参数、schema 增加 runtime_settings、Web 增加 quarantine_reasons/limitation_reasons/writer_activity/last_batch，无新增数据库表，不改冻结 TaskRequest。浏览器模块纳入 Repair 执行器指纹，旧验证报告需重验。实施与真实验收分别记录，详见 acceptance-report.md 本轮记录。
+
+## 持久化恢复与统一诊断（2026-10-03）
+
+SQLite 写入入口将 `user_version` 从旧值 0 增量迁移为 2，新增 attachment_work 与 listing_pages；只读入口不建库、不迁移、不取得采集锁，也不执行残留任务恢复。高于支持版本的数据库拒绝写入。旧备份可读取，在首次明确写入时迁移；原 request_json/request_digest、资料与决策不迁移改写。
+
+附件队列以任务、来源、资料地址、附件地址唯一关联当前资料版本。下载缺失项，下载完成后同一正文的附件变化生成新的提取版本；正文原件变化仍生成来源版本。资料去重排除 record_id、quality_state 和任务派生 date_range_status，纳入附件、内容及限制变化。旧任务在明确续跑时从已保存资料重建附件队列。恢复优先使用当前任务关联的正文版本，在该来源版本下追加提取版本；其他任务的较新来源版本保持最新位置，不因补旧附件倒退。
+
+列表检查点与实际请求/响应 URL、原件 ID、逐页枚举策略共同保存。不采用未验证的官方日期过滤，不以日期排序假设终止；连续批次使用检查点和已存条目，已保存原件不会被附件续跑重复请求。
+
+TaskRequest 新输入禁止额外字段，历史读取只取已知字段而保留原始序列化事实。DocumentRecord.date_range_status 为 within_range/unknown；缺日期不进入硬 limitations。质量决策显式区分 PASS→validated（须无硬限制）、REJECT→rejected、UNCERTAIN→quarantined。
+
+失败保留脱敏事实、HTTP 状态、阶段、地址、异常及原因类型，恢复后标记 resolved，不删除原失败。diagnostics.task_report 在只读快照中派生来源覆盖、缺失原件、内容限制、复核、未知范围及下一步；不依赖 FastAPI。采集响应增加 data.report/pending_attachments；CLI 增加 task list/report/missing，Web 增加任务 report/missing 子接口。现有响应与命令保留。

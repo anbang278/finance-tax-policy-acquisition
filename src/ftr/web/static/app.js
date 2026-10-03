@@ -98,8 +98,12 @@ function renderOverview(data) {
 }
 
 function renderPolicies(data) {
-  $('#policy-total').textContent = `${data.total} 份`;
-  const cards = data.items.map((d) => `<button class="policy-card ${d.record_id === state.policyId ? 'selected' : ''}" data-policy="${esc(d.record_id)}" aria-pressed="${d.record_id === state.policyId}"><div class="card-top"><span>${esc(label(names.source, d.source_id))} · ${esc(label(names.type, d.document_type))}</span>${badge('quality', d.quality_state)}</div><h3>${esc(d.title || '标题缺失')}</h3><div class="card-bottom"><span class="number">${esc(d.document_number || '文号未提取')}</span><span>${esc(d.listing_date || '日期缺失')}</span></div></button>`).join('');
+  $('#policy-total').textContent = `${data.total} 份${data.date_unknown_count ? ` · 日期未知 ${data.date_unknown_count} 份（范围归属待确认）` : ''}`;
+  let unknownGroup = false;
+  const cards = data.items.map((d) => {
+    const group = !d.listing_date && !unknownGroup ? '<p class="body-note">日期未知：资料已保存，无法确认是否属于指定日期区间。</p>' : '';
+    if (!d.listing_date) unknownGroup = true;
+    return group + `<button class="policy-card ${d.record_id === state.policyId ? 'selected' : ''}" data-policy="${esc(d.record_id)}" aria-pressed="${d.record_id === state.policyId}"><div class="card-top"><span>${esc(label(names.source, d.source_id))} · ${esc(label(names.type, d.document_type))}</span>${badge('quality', d.quality_state)}</div><h3>${esc(d.title || '标题缺失')}</h3><div class="card-bottom"><span class="number">${esc(d.document_number || '文号未提取')}</span><span>${esc(d.listing_date || '日期缺失')}</span></div></button>`; }).join('');
   updateNode($('#policy-list'), cards || '<div class="empty-state"><h2>没有匹配资料</h2><p>调整关键词或筛选条件后重试。</p></div>');
   updateNode($('#policy-pagination'), pagination(data, 'policyPage'));
 }
@@ -128,13 +132,15 @@ function renderPolicy(d, versions) {
 }
 
 function renderTasks(data) {
-  updateNode($('#task-list'), data.items.map((t) => `<button class="task-card ${t.task_id === state.taskId ? 'selected' : ''}" data-task="${esc(t.task_id)}" aria-pressed="${t.task_id === state.taskId}"><div class="card-top">${badge('task', t.state)}<span>${esc(t.task_id.slice(0, 8))}</span></div><h3>${esc(t.request.date_from)} — ${esc(t.request.date_to)}</h3><div class="card-bottom">${t.request.source_ids.map((key) => esc(label(names.source, key))).join(' / ')}</div><div class="task-counts"><span><b>${t.pages_count}</b> 页扫描</span><span><b>${t.queue_counts.SAVED || 0}</b> 条保存</span><span><b>${t.queue_counts.FAILED || 0}</b> 条失败</span></div></button>`).join('') || '<div class="empty-state"><h2>没有匹配任务</h2><p>调整任务状态筛选后重试。</p></div>');
+  updateNode($('#task-list'), data.items.map((t) => `<button class="task-card ${t.task_id === state.taskId ? 'selected' : ''}" data-task="${esc(t.task_id)}" aria-pressed="${t.task_id === state.taskId}"><div class="card-top">${badge('task', t.state)}<span>${esc(t.task_id.slice(0, 8))}</span></div><h3>${esc(t.request.date_from)} — ${esc(t.request.date_to)}</h3><div class="card-bottom">${t.request.source_ids.map((key) => esc(label(names.source, key))).join(' / ')}</div><div class="task-counts"><span><b>${t.pages_count}</b> 页扫描</span><span><b>${t.queue_counts.SAVED || 0}</b> 条保存</span><span><b>${t.active_failure_count || t.queue_counts.FAILED || 0}</b> 项未解决失败</span></div></button>`).join('') || '<div class="empty-state"><h2>没有匹配任务</h2><p>调整任务状态筛选后重试。</p></div>');
   updateNode($('#task-pagination'), pagination(data, 'taskPage'));
 }
 
 function renderTask(t, items, events) {
   const counts = (values) => Object.entries(names.queue).map(([key, text]) => `<span>${text}<b>${values[key] || 0}</b></span>`).join('');
   const sources = t.sources.map((s) => `<article class="source-progress"><div class="source-progress-header"><button data-source="${esc(s.source_id)}">${esc(label(names.source, s.source_id))} ${icon('external')}</button><span class="badge">${s.discovery_done ? '列表枚举结束' : '列表尚未枚举完'}</span></div><p>已扫描 ${s.pages_count} 页 · 已发现 ${s.discovered_count} 条 · ${s.discovery_done ? '无下一页' : `下一页检查点 ${s.next_page}`}<br>保存条目 ${s.queue_counts.SAVED} 条 · 本任务新增资料版本 ${s.new_versions_count} 个</p><div class="queue-counts">${counts(s.queue_counts)}</div></article>`).join('');
+  const report = t.report;
+  const reportHtml = report ? `<div class="limitation"><p>范围核查：${report.completion.coverage === 'COMPLETE' ? '登记栏目已核查完' : '尚未核查完，未读范围内的匹配数量未知'}；原件：${report.completion.downloads === 'COMPLETE' ? '已发现原件已采齐' : '仍有未获取内容或待解决失败'}；可读性：${report.completion.readability === 'READABLE' ? '已保存内容可读' : report.completion.readability === 'NO_CONTENT' ? '尚无可读内容' : '存在内容限制'}；复核：${report.completion.review === 'DECIDED' ? '已有复核结论，请查看各资料状态' : '仍有待复核或受限资料'}。</p><p>${esc(report.next_step)}</p>${report.missing_items.map((m) => `<p>尚缺：${esc(m.title || m.label || '待处理条目')} ${m.label ? esc(m.label) : ''} · ${esc(m.reason)} ${external(m.url, '来源地址')}</p>`).join('')}${report.failures.filter((f) => !f.resolved).map((f) => `<p>${esc(f.label)}：${esc(f.reason)}<br>${esc(f.next_step)}</p>`).join('')}${report.content_limits.map((m) => `<p>${esc(m.title || '内容限制')}：${esc(m.reason)}<br>${esc(m.next_step)}${m.evidence_id ? downloadLink(m.evidence_id, '下载原件') : ''}</p>`).join('')}</div>` : '';
   const warning = t.pause_requested || t.cancel_requested ? `<div class="limitation">${t.cancel_requested ? '已登记取消请求' : '已登记暂停请求'}；任务状态仍按数据库记录展示。</div>` : '';
   let content = '';
   if (state.taskTab === 'queue') {
@@ -145,7 +151,7 @@ function renderTask(t, items, events) {
     content = `<h3 class="section-title">原始任务请求</h3><pre class="request-json">${esc(JSON.stringify(t.request, null, 2))}</pre><p class="body-note">预算是本次采集上限，不是政策全量分母。待语义复核项：${t.pending_decisions} 个。</p>`;
   }
   const tabs = [['queue', '发现队列'], ['events', '事件与失败'], ['request', '任务参数']];
-  updateNode($('#task-detail'), `<div class="detail-header"><button class="mobile-back" data-back>${icon('back')}返回任务列表</button><div class="task-heading-row">${badge('task', t.state)}<span class="task-id mono">${esc(t.task_id.slice(0, 12))}</span></div><h2>采集 · ${esc(t.request.date_from)} — ${esc(t.request.date_to)}</h2><div class="doc-meta"><span>创建时间 <b>${esc(stamp(t.created_at))}</b></span><span>最近状态记录 <b>${esc(stamp(t.last_state_at))}</b></span></div><div class="task-id mono">${esc(t.task_id)}</div>${warning}<p class="body-note">活动检查：${esc(t.writer_activity === 'NO_WRITER_OBSERVED' ? '未观察到写入者' : t.writer_activity === 'WRITER_LOCK_HELD_TASK_UNKNOWN' ? '资料目录有写入者，具体任务未确认' : '无法确认')}。任务状态按数据库记录展示。</p>${t.last_batch?.reasons?.length ? `<div class="limitation">最近批次停止原因：${t.last_batch.reasons.map((r) => esc(stopLabels[r] || r)).join('；')}</div>` : ''}${sources}</div><div class="detail-tabs" role="tablist" aria-label="任务内容">${tabs.map(([key, title]) => `<button role="tab" aria-selected="${state.taskTab === key}" class="${state.taskTab === key ? 'active' : ''}" data-task-tab="${key}">${title}</button>`).join('')}</div><div class="detail-body">${content}</div>`);
+  updateNode($('#task-detail'), `<div class="detail-header"><button class="mobile-back" data-back>${icon('back')}返回任务列表</button><div class="task-heading-row">${badge('task', t.state)}<span class="task-id mono">${esc(t.task_id.slice(0, 12))}</span></div><h2>采集 · ${esc(t.request.date_from)} — ${esc(t.request.date_to)}</h2><div class="doc-meta"><span>创建时间 <b>${esc(stamp(t.created_at))}</b></span><span>最近状态记录 <b>${esc(stamp(t.last_state_at))}</b></span></div><div class="task-id mono">${esc(t.task_id)}</div>${warning}${reportHtml}<p class="body-note">活动检查：${esc(t.writer_activity === 'NO_WRITER_OBSERVED' ? '未观察到写入者' : t.writer_activity === 'WRITER_LOCK_HELD_TASK_UNKNOWN' ? '资料目录有写入者，具体任务未确认' : '无法确认')}。任务状态按数据库记录展示。</p>${t.last_batch?.reasons?.length ? `<div class="limitation">最近批次停止原因：${t.last_batch.reasons.map((r) => esc(stopLabels[r] || r)).join('；')}</div>` : ''}${sources}</div><div class="detail-tabs" role="tablist" aria-label="任务内容">${tabs.map(([key, title]) => `<button role="tab" aria-selected="${state.taskTab === key}" class="${state.taskTab === key ? 'active' : ''}" data-task-tab="${key}">${title}</button>`).join('')}</div><div class="detail-body">${content}</div>`);
   applyMobile();
 }
 
@@ -154,7 +160,12 @@ function renderQueue(data) {
 }
 
 function renderEvents(data) {
-  return data.items.map((e) => `<article class="event-row ${esc(e.kind)}"><time>${esc(stamp(e.created_at))}${e.source_id ? ` · ${esc(label(names.source, e.source_id))}` : ''}</time><strong>${e.event === 'task_state' ? `任务状态：${esc(label(names.task, e.details.state))}` : esc(e.event)}</strong><p>${esc(e.details.error || JSON.stringify(e.details))}</p>${e.details.url ? external(e.details.url, '关联来源页面') : ''}</article>`).join('') || '<div class="inline-empty">尚无登记事件。</div>';
+  return data.items.map((e) => {
+    const x = e.explanation;
+    const title = x ? `${x.label}${x.resolved ? ' · 已恢复' : ' · 待处理'}` : e.event === 'task_state' ? `任务状态：${label(names.task, e.details.state)}` : e.event === 'batch_stopped' ? '本批已停止' : '任务记录';
+    const text = x ? `${x.reason}\n${x.next_step}` : e.event === 'batch_stopped' ? (e.details.reasons || []).map((r) => stopLabels[r] || r).join('；') : '';
+    return `<article class="event-row ${esc(e.kind)}"><time>${esc(stamp(e.created_at))}${e.source_id ? ` · ${esc(label(names.source, e.source_id))}` : ''}</time><strong>${esc(title)}</strong><p>${esc(text)}</p>${e.details.url ? external(e.details.url, '关联来源页面') : ''}<details><summary>技术详情</summary><pre>${esc(JSON.stringify(e.details, null, 2))}</pre></details></article>`;
+  }).join('') || '<div class="inline-empty">尚无登记事件。</div>';
 }
 
 function applyMobile() {

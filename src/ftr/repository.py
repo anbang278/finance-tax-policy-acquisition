@@ -60,13 +60,70 @@ CREATE TABLE IF NOT EXISTS audit (
 """
 
 
+def associated_document(db, task_id, source_id, canonical_url):
+    """Keep a task's evidence version; global latest is only a legacy fallback."""
+    own = db.execute(
+        "SELECT * FROM documents WHERE task_id=? AND source_id=? AND canonical_url=? "
+        "ORDER BY source_version DESC,extraction_version DESC LIMIT 1",
+        (task_id, source_id, canonical_url),
+    ).fetchone()
+    if own:
+        return own
+    if db.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='attachment_work'"
+    ).fetchone():
+        linked = db.execute(
+            "SELECT d.* FROM attachment_work w JOIN documents d ON d.id=w.record_id "
+            "WHERE w.task_id=? AND w.source_id=? AND w.canonical_url=? LIMIT 1",
+            (task_id, source_id, canonical_url),
+        ).fetchone()
+        if linked:
+            return linked
+    return db.execute(
+        "SELECT * FROM documents WHERE source_id=? AND canonical_url=? "
+        "ORDER BY source_version DESC,extraction_version DESC LIMIT 1",
+        (source_id, canonical_url),
+    ).fetchone()
+
+
 class Repository:
-    def __init__(self, data_dir: Path):
-        data_dir.mkdir(parents=True, exist_ok=True)
+    def __init__(self, data_dir: Path, *, readonly: bool = False):
         self.path = data_dir / "database.sqlite3"
+        if readonly:
+            if not self.path.is_file():
+                raise FileNotFoundError("任务数据库不存在；请先采集资料")
+            self.db = sqlite3.connect(self.path.resolve().as_uri() + "?mode=ro", uri=True)
+            self.db.row_factory = sqlite3.Row
+            self.db.execute("BEGIN")
+            return
+        data_dir.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(self.path)
         self.db.row_factory = sqlite3.Row
+        version = self.db.execute("PRAGMA user_version").fetchone()[0]
+        if version > 2:
+            self.db.close()
+            raise ValueError("数据库版本高于当前程序，请升级程序后再写入")
         self.db.executescript(SCHEMA)
+        # Additive migration only in the explicit writer path; no old record rewrites.
+        if version < 2:
+            self.db.executescript("""
+                BEGIN;
+                CREATE TABLE IF NOT EXISTS attachment_work (
+                    task_id TEXT NOT NULL REFERENCES tasks(id), source_id TEXT NOT NULL,
+                    canonical_url TEXT NOT NULL, url TEXT NOT NULL,
+                    record_id TEXT NOT NULL REFERENCES documents(id),
+                    state TEXT NOT NULL DEFAULT 'PENDING',
+                    PRIMARY KEY(task_id,source_id,canonical_url,url)
+                );
+                CREATE TABLE IF NOT EXISTS listing_pages (
+                    task_id TEXT NOT NULL, source_id TEXT NOT NULL, page INTEGER NOT NULL,
+                    evidence_id TEXT NOT NULL, request_url TEXT NOT NULL, final_url TEXT NOT NULL,
+                    strategy TEXT NOT NULL DEFAULT 'full_enumeration',
+                    PRIMARY KEY(task_id,source_id,page)
+                );
+                PRAGMA user_version=2;
+                COMMIT;
+            """)
 
     def close(self) -> None:
         self.db.close()
@@ -181,18 +238,38 @@ class Repository:
             raise KeyError("证据不存在")
         return Evidence.model_validate_json(row["metadata_json"])
 
-    def add_document(self, task_id: str, record: DocumentRecord) -> tuple[str, bool]:
+    def add_document(
+        self, task_id: str, record: DocumentRecord, *, base_record_id: str | None = None
+    ) -> tuple[str, bool]:
         latest = self.db.execute(
             "SELECT * FROM documents WHERE source_id=? AND canonical_url=? ORDER BY source_version DESC, extraction_version DESC LIMIT 1",
             (record.source_id, record.canonical_url),
         ).fetchone()
+        if base_record_id is not None:
+            base = self.db.execute(
+                "SELECT * FROM documents WHERE id=?", (base_record_id,)
+            ).fetchone()
+            if base is None or (base["source_id"], base["canonical_url"], base["raw_sha256"]) != (
+                record.source_id,
+                record.canonical_url,
+                record.evidence_id,
+            ):
+                raise ValueError("附件恢复的基础版本或正文证据不匹配")
+            latest = self.db.execute(
+                "SELECT * FROM documents WHERE source_id=? AND canonical_url=? AND source_version=? "
+                "ORDER BY extraction_version DESC LIMIT 1",
+                (record.source_id, record.canonical_url, base["source_version"]),
+            ).fetchone()
+        previous = DocumentRecord.model_validate_json(latest["record_json"]) if latest else None
         if (
             latest
             and latest["raw_sha256"] == record.evidence_id
             and latest["body_sha256"] == record.body_sha256
-            and DocumentRecord.model_validate_json(latest["record_json"]).parser_version
-            == record.parser_version
+            and previous is not None
+            and self._material_digest(previous) == self._material_digest(record)
         ):
+            with self.db:
+                self.sync_attachments(task_id, previous)
             return str(latest["id"]), False
         source_version = (
             (int(latest["source_version"]) + 1)
@@ -220,11 +297,89 @@ class Repository:
                     task_id,
                 ),
             )
+            self.sync_attachments(task_id, record)
             self.db.execute(
                 "UPDATE source_runs SET documents_count=documents_count+1 WHERE task_id=? AND source_id=?",
                 (task_id, record.source_id),
             )
         return record.record_id, True
+
+    @staticmethod
+    def _material_digest(record: DocumentRecord) -> str:
+        payload = record.model_dump(
+            mode="json", exclude={"record_id", "quality_state", "date_range_status"}
+        )
+        return digest(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode())
+
+    def sync_attachments(self, task_id: str, record: DocumentRecord) -> None:
+        # Superseded attachment links must not keep an obsolete recovery job alive.
+        self.db.execute(
+            "UPDATE attachment_work SET state='DONE',record_id=? WHERE task_id=? AND source_id=? AND canonical_url=?",
+            (record.record_id, task_id, record.source_id, record.canonical_url),
+        )
+        for attachment in record.attachments:
+            self.db.execute(
+                "INSERT INTO attachment_work(task_id,source_id,canonical_url,url,record_id,state) "
+                "VALUES(?,?,?,?,?,?) ON CONFLICT(task_id,source_id,canonical_url,url) "
+                "DO UPDATE SET record_id=excluded.record_id,state=excluded.state",
+                (
+                    task_id,
+                    record.source_id,
+                    record.canonical_url,
+                    attachment.url,
+                    record.record_id,
+                    "DONE"
+                    if attachment.download_state == "saved" and attachment.evidence_id
+                    else "PENDING",
+                ),
+            )
+
+    def rebuild_attachment_work(self, task_id: str, source_id: str) -> None:
+        from ftr.adapters.common import canonical_url
+
+        with self.db:
+            for row in self.db.execute(
+                "SELECT url FROM discovered WHERE task_id=? AND source_id=? AND state='SAVED'",
+                (task_id, source_id),
+            ).fetchall():
+                latest = associated_document(self.db, task_id, source_id, canonical_url(row[0]))
+                if latest:
+                    self.sync_attachments(
+                        task_id, DocumentRecord.model_validate_json(latest["record_json"])
+                    )
+
+    def pending_attachment_records(self, task_id: str, source_id: str) -> list[DocumentRecord]:
+        rows = self.db.execute(
+            "SELECT DISTINCT record_id FROM attachment_work WHERE task_id=? AND source_id=? "
+            "AND state='PENDING'",
+            (task_id, source_id),
+        ).fetchall()
+        return [self.get_document(row[0]) for row in rows]
+
+    def resolve_failures(self, task_id: str, source_id: str, stage: str, url: str) -> None:
+        from ftr.diagnostics import safe_url
+
+        for row in self.db.execute(
+            "SELECT id,details_json FROM failures WHERE task_id=? AND source_id=?",
+            (task_id, source_id),
+        ).fetchall():
+            details = json.loads(row["details_json"])
+            if (
+                details.get("stage") == stage
+                and (
+                    details["url_digest"] == digest(url.encode())
+                    if details.get("url_digest")
+                    else (details.get("url") or safe_url((details.get("ref") or {}).get("url")))
+                    == safe_url(url)
+                )
+                and not details.get("resolved")
+            ):
+                details["resolved"] = True
+                self.db.execute(
+                    "UPDATE failures SET details_json=? WHERE id=?",
+                    (json.dumps(details, ensure_ascii=False), row["id"]),
+                )
+        self.db.commit()
 
     def get_document(self, record_id: str) -> DocumentRecord:
         row = self.db.execute(
@@ -272,10 +427,17 @@ class Repository:
                 raise ValueError("决策已提交且内容不同")
             return self.get_document(request.record_id)
         record = self.get_document(request.record_id)
-        if digest(record.model_dump_json().encode()) != request.input_digest:
+        serialized = self.db.execute(
+            "SELECT record_json FROM documents WHERE id=?", (request.record_id,)
+        ).fetchone()[0]
+        if digest(serialized.encode()) != request.input_digest:
             raise ValueError("资料已变化，决策失效")
-        state: Literal["validated", "quarantined"] = (
-            "validated" if decision.result == "PASS" and not record.limitations else "quarantined"
+        state: Literal["validated", "quarantined", "rejected"] = (
+            "rejected"
+            if decision.result == "REJECT"
+            else "validated"
+            if decision.result == "PASS" and not record.limitations
+            else "quarantined"
         )
         record.quality_state = state
         with self.db:

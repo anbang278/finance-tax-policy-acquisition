@@ -58,7 +58,23 @@ from ftr.repository import Repository
 from ftr.web.app import create_app
 settings = load_settings()
 repo = Repository(settings.data_dir)
+from datetime import date
+from ftr.models import TaskRequest
+from pydantic import ValidationError
+try:
+    TaskRequest.model_validate({"sources": ["mof"], "date_from":"2026-09-01", "date_to":"2026-09-30"})
+except ValidationError:
+    pass
+else:
+    raise AssertionError("未知范围字段没有拒绝")
+task = repo.create_task(TaskRequest(source_ids=["mof"],date_from=date(2026,9,1),date_to=date(2026,9,30)))
+assert repo.db.execute("PRAGMA user_version").fetchone()[0] == 2
 repo.close()
+from ftr.cli import parser,run
+before = (settings.data_dir / "database.sqlite3").read_bytes()
+for args in (["task","list"], ["task","report","--task",task], ["task","missing","--task",task], ["search","--query",""]):
+    assert run(parser().parse_args(args)).status in ("CREATED","COMPLETED")
+assert (settings.data_dir / "database.sqlite3").read_bytes() == before
 assert (files("ftr") / "data" / "ftr.example.yaml").is_file()
 from ftr.browser import candidates
 from ftr.diagnostics import limitation_reasons
@@ -77,6 +93,10 @@ async def verify():
         for path in ("/", "/static/app.js", "/static/style.css", "/static/favicon.svg", "/api/ui-config", "/api/overview", "/api/policies", "/api/tasks", "/api/sources"):
             result = await client.get(path)
             assert result.status_code == 200, (path, result.status_code)
+        report = await client.get(f"/api/tasks/{task}/report")
+        assert report.status_code == 200 and report.json()["report"]["unseen_matches"] is None
+        missing = await client.get(f"/api/tasks/{task}/missing")
+        assert missing.status_code == 200
 asyncio.run(verify())
 from ftr.workbench import manage
 try:
