@@ -26,6 +26,7 @@ def executor_fingerprint():
         "network.py",
         "browser.py",
         "adapters/common.py",
+        "content_layout.py",
         "models.py",
         "config.py",
         "repository.py",
@@ -144,7 +145,7 @@ def offline(root, repo, rules, failure):
         record = parse_detail(refs[0], sample["detail"].encode(), "fixture", rules)
         if (
             record.title != sample["title"]
-            or record.body_text != sample["body"]
+            or record.body_text != sample.get("body_layout", sample["body"])
             or str(record.listing_date) != sample["date"]
         ):
             raise ValueError("历史正文样本发生语义回归")

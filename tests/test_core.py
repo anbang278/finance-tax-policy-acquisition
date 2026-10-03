@@ -130,7 +130,7 @@ def test_tax_detail_excludes_toolbar_and_marks_main_attachments():
         "<a href='files/form.xls'>申报表</a></div></div></div>"
     ).encode()
     record = parse_detail(ref, raw, digest(raw))
-    assert record.body_text == "公告正文。 申报表"
+    assert record.body_text == "公告正文。\n\n申报表"
     assert "字体" not in record.body_text
     assert record.issued_date == date(2026, 9, 4)
     assert record.source_status_claim == "尚未生效"

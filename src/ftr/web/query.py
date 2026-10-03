@@ -9,10 +9,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from ftr.adapters.common import canonical_url
 from ftr.config import load_sources
 from ftr.diagnostics import failure_explanation, limitation_reasons, task_diagnostics, task_report
 from ftr.models import Evidence, digest
+from ftr.web.body_display import recover_body
 
 LATEST = """
 WITH ranked AS (
@@ -210,7 +213,14 @@ class ReadQueries:
                 "SELECT metadata_json FROM evidence WHERE id=?", (record["evidence_id"],)
             ).fetchone()
             record["evidence"] = json.loads(evidence[0]) if evidence else None
-            return response(item=record)
+        record["body_display"] = {"mode": "plain", "blocks": [], "reason": "STRUCTURE_UNAVAILABLE"}
+        try:
+            raw, original = self.evidence_download(record["evidence_id"])
+            if original.media_type.split(";")[0].strip() == "text/html":
+                record["body_display"] = recover_body(raw, record)
+        except (QueryError, ValidationError):
+            record["body_display"]["reason"] = "EVIDENCE_UNAVAILABLE"
+        return response(item=record)
 
     def versions(self, record_id: str) -> dict:
         with self.snapshot() as db:

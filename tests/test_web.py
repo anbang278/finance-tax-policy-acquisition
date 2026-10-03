@@ -505,3 +505,46 @@ def test_browser_reading_monitor_refresh_and_recovery(web_data):
     finally:
         process.terminate()
         process.wait(timeout=10)
+
+
+def test_missing_corrupt_and_valid_evidence_are_read_only(web_data):
+    from ftr.evidence import EvidenceStore
+    from ftr.web.query import ReadQueries
+
+    root, repo, latest = web_data["root"], web_data["repo"], web_data["latest"]
+    raw = '<div class="TRS_Editor"><p>新版增值税正文</p><p>第二段</p></div>'.encode()
+    evidence = EvidenceStore(root).save(raw, latest.source_url, latest.source_url, "text/html")
+    repo.save_evidence(evidence)
+    import sqlite3
+
+    with sqlite3.connect(root / "database.sqlite3") as db:
+        row = db.execute(
+            "SELECT record_json FROM documents WHERE id=?", (latest.record_id,)
+        ).fetchone()
+        record = json.loads(row[0])
+        record.update(evidence_id=evidence.evidence_id, body_text="新版增值税正文 第二段")
+        db.execute(
+            "UPDATE documents SET record_json=? WHERE id=?", (json.dumps(record), latest.record_id)
+        )
+    database_before = (root / "database.sqlite3").read_bytes()
+    query = ReadQueries(root)
+    assert query.policy(latest.record_id)["item"]["body_display"]["mode"] == "structured"
+    assert (root / "database.sqlite3").read_bytes() == database_before
+    path = root / "evidence" / evidence.relative_path
+    assert path.read_bytes() == raw
+    path.write_bytes(b"corrupt")
+    assert (
+        query.policy(latest.record_id)["item"]["body_display"]["reason"] == "EVIDENCE_UNAVAILABLE"
+    )
+    path.unlink()
+    assert query.policy(latest.record_id)["item"]["body_text"] == "新版增值税正文 第二段"
+    assert (root / "database.sqlite3").read_bytes() == database_before
+
+
+def test_ui_assets_do_not_keep_stale_layout(web_data):
+    client = web_data["client"]
+    for route in ("/", "/static/app.js?v=body-layout-2", "/static/style.css?v=body-layout-2"):
+        result = client.get(route)
+        assert result.status_code == 200
+        assert result.headers["cache-control"] == "no-store"
+    assert "app.js?v=body-layout-2" in client.get("/").text

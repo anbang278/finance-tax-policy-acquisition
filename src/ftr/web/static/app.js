@@ -112,12 +112,25 @@ function downloadLink(id, text) {
   return `<a href="/api/evidence/${encodeURIComponent(id)}/download" class="button" data-download>${icon('download')}${esc(text)}</a>`;
 }
 
+function renderBody(d) {
+  if (!d.body_text) return '<div class="inline-empty">正文未提取，请查看附件或官方原文。</div>';
+  if (d.body_display?.mode === 'structured') {
+    const blocks = d.body_display.blocks.map((b) => {
+      const align = ['center', 'right'].includes(b.align) ? b.align : 'left';
+      const kind = b.type === 'heading' ? 'heading' : 'paragraph';
+      return `<p class="body-block body-${kind} align-${align}">${esc(b.text)}</p>`;
+    }).join('');
+    return `<article class="policy-body structured-body">${blocks}</article>`;
+  }
+  return `<p class="body-note">无法恢复原文排版，以下展示已保存的提取文本。</p><article class="policy-body">${esc(d.body_text)}</article>`;
+}
+
 function renderPolicy(d, versions) {
   const header = `<div class="detail-header"><button class="mobile-back" data-back>${icon('back')}返回政策列表</button><div class="detail-eyebrow"><span>${esc(label(names.type, d.document_type))}</span>${badge('quality', d.quality_state)}<span>来源 v${d.source_version} · 提取 v${d.extraction_version}</span></div><h2>${esc(d.title || '标题缺失')}</h2><div class="doc-meta"><span>来源 <b>${esc(label(names.source, d.source_id))}</b></span><span>文号 <b>${esc(d.document_number || '未提取')}</b></span><span>${esc(dateName(d.listing_date_kind))} <b>${esc(d.listing_date || '缺失')}</b></span><span>成文日期 <b>${esc(d.issued_date || '未提取')}</b></span><span>发布日期 <b>${esc(d.published_date || '未提取')}</b></span></div><div class="origin-row"><div>官方原文${external(d.source_url, d.source_url || '')}</div><button class="button" data-task="${esc(d.task_id)}">${icon('activity')}关联任务</button></div>${d.limitations.length ? `<div class="limitation">${(d.limitation_reasons || d.limitations.map((item) => ({label: item, original: item}))).map((item) => `<p>${esc(item.label)}${item.original !== item.label ? `：${esc(item.original)}` : ''}</p>`).join('')}</div>` : ''}</div>`;
   const tabs = [['body', '正文'], ['attachments', `附件 ${d.attachments.length}`], ['versions', `版本 ${versions.length}`], ['evidence', '证据']];
   let content = '';
   if (state.policyTab === 'body') {
-    content = `<p class="body-note">以下为保存的实际提取文本；资料状态与政策法律效力分别判断。</p>${d.body_text ? `<article class="policy-body">${esc(d.body_text)}</article>` : '<div class="inline-empty">正文未提取，请查看附件或官方原文。</div>'}`;
+    content = `<p class="body-note">以下为保存的实际提取文本；资料状态与政策法律效力分别判断。</p>${renderBody(d)}`;
   } else if (state.policyTab === 'attachments') {
     content = d.attachments.map((a) => `<article class="attachment"><h4>${icon('file')} ${esc(a.label || '未命名附件')}</h4><div class="doc-meta"><span>${esc(label(names.role, a.content_role))}</span><span>保存：${esc(label(names.download, a.download_state))}</span><span>解析：${esc(label(names.extraction, a.extraction_state))}</span></div><div class="queue-links">${a.download_state === 'saved' && a.evidence_id ? downloadLink(a.evidence_id, '下载保存原件') : '<span>暂无可下载的本地原件</span>'}${external(a.url, '来源附件')}</div>${a.text ? `<details class="attachment-text"><summary>查看已提取文本</summary><p>${esc(a.text)}</p></details>` : '<p class="body-note">该附件没有已提取文本。</p>'}</article>`).join('') || '<div class="inline-empty">这份资料没有登记直接附件。</div>';
   } else if (state.policyTab === 'versions') {

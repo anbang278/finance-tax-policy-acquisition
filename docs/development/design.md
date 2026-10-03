@@ -88,3 +88,15 @@ SQLite 写入入口将 `user_version` 从旧值 0 增量迁移为 2，新增 att
 TaskRequest 新输入禁止额外字段，历史读取只取已知字段而保留原始序列化事实。DocumentRecord.date_range_status 为 within_range/unknown；缺日期不进入硬 limitations。质量决策显式区分 PASS→validated（须无硬限制）、REJECT→rejected、UNCERTAIN→quarantined。
 
 失败保留脱敏事实、HTTP 状态、阶段、地址、异常及原因类型，恢复后标记 resolved，不删除原失败。diagnostics.task_report 在只读快照中派生来源覆盖、缺失原件、内容限制、复核、未知范围及下一步；不依赖 FastAPI。采集响应增加 data.report/pending_attachments；CLI 增加 task list/report/missing，Web 增加任务 report/missing 子接口。现有响应与命令保留。
+
+
+## 正文公文排版（2026-10-03）
+
+详情响应新增 body_display：mode 为 structured/plain，blocks 为受控 type（paragraph/heading）、text、align（left/center/right），reason 为回退原因或 null。复用 evidence_download 路径与哈希校验；仅匹配已保存正文非空白字符顺序的正文容器可以恢复。嵌套段落去重，保留 br/已有换行，表格和 pre 回退；独立且完全匹配详情标题的首块不重复展示。全部文本转义，无原站 HTML/CSS 执行。
+
+工作台 HTML、静态资源及 API 使用 no-store；前端入口携带排版资源更新标识，以刷新已打开浏览器的旧脚本与样式。
+
+
+## 全库与后续采集段落保留（2026-10-03）
+
+content_layout.extract_blocks 为采集与展示共用的纯文本结构提取。段落之间使用两个换行，br 使用单换行；嵌套行内容器中的段落也保留，评论/脚本/样式不进入正文。table 行边界保留、单元格文字以空格分隔；展示中的纯图片空表格不再触发整篇回退，含文字的复杂表格仍回退保存文本。新 parse_detail 标注 parser_version=0.1.4；原件未变但重新提取正文改变时沿用现有提取版本机制，旧摘要保持原样。

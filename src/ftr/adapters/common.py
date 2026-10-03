@@ -6,6 +6,7 @@ from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from lxml import html
 
+from ftr.content_layout import body_text_of
 from ftr.models import Attachment, DiscoveredRef, DocumentRecord, DocumentType, digest
 
 DATE_PATTERN = re.compile(r"(20\d{2})[年./-]\s*(\d{1,2})[月./-]\s*(\d{1,2})")
@@ -62,7 +63,7 @@ def parse_detail(ref: DiscoveredRef, raw: bytes, evidence_id: str, rules=None) -
         )
         if not body_nodes:
             body_nodes = tree.xpath("//div[contains(@class,'zw') or contains(@class,'content')]//p")
-        body = text_of(body_nodes[0]) if body_nodes else ""
+        body = body_text_of(body_nodes[0]) if body_nodes else ""
         status_nodes = tree.xpath("//div[contains(@class,'arctips')]")
         status_match = re.search(
             r"尚未生效|现行有效|已失效|已废止",
@@ -88,7 +89,7 @@ def parse_detail(ref: DiscoveredRef, raw: bytes, evidence_id: str, rules=None) -
         )
         if not body_nodes:
             body_nodes = tree.xpath("//div[contains(@class,'content')]//p")
-        body = text_of(body_nodes[0]) if body_nodes else ""
+        body = body_text_of(body_nodes[0]) if body_nodes else ""
         status_text = ""
         issued = None
         published = None
@@ -100,7 +101,7 @@ def parse_detail(ref: DiscoveredRef, raw: bytes, evidence_id: str, rules=None) -
             title = text_of(heads[0]) if heads else ""
         if rules.bodies:
             body_nodes = nodes(tree, rules.bodies)
-            body = text_of(body_nodes[0]) if body_nodes else ""
+            body = body_text_of(body_nodes[0]) if body_nodes else ""
     if not body:
         # 只保存可核验的页面文本，并保持隔离状态；不会误称正文完整。
         body = ""
@@ -150,6 +151,7 @@ def parse_detail(ref: DiscoveredRef, raw: bytes, evidence_id: str, rules=None) -
         published_date=published,
         document_number=number,
         source_status_claim=status_text or None,
+        parser_version="0.1.4",
         body_text=body,
         body_sha256=digest(body.encode()),
         evidence_id=evidence_id,

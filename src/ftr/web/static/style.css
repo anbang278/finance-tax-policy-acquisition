@@ -7,3 +7,5 @@
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 
 #overview>.body-note{grid-column:1/-1;margin:0;overflow-wrap:anywhere}
+
+.policy-body{font-size:16px;line-height:1.9;margin-inline:auto}.structured-body{white-space:normal}.body-block{white-space:pre-wrap;text-indent:2em;margin:0 0 .9em}.body-block.align-center{text-align:center;text-indent:0;font-weight:600}.body-block.align-right{text-align:right;text-indent:0}.body-heading{text-indent:0;font-weight:600}.body-block:last-child{margin-bottom:0}

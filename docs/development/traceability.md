@@ -68,3 +68,13 @@ A05 按本轮确认改为“错误内容或错误分类不得通过”；合法�
 | D-07 普通只读 | Repository readonly、CLI read_operation | 写锁/残留 RUNNING 下读取字节不变 |
 | D-08 分页证据 | MofAdapter 实际请求、runtime 最终响应 | 跨批分页 URL、真实三页元数据 |
 | 空日期可采集 | 非硬限制、查询保留未知分组 | 空日期 collected/待复核、筛选仍可见 |
+
+
+## 正文公文排版（2026-10-03）
+
+正文排版 → web/body_display.py、web/query.py、web/static/app.js/style.css → test_body_display.py、test_web.py；真实公告浏览器检查段落、对齐、轮询保位及窄屏。
+
+
+## 全库与后续采集段落保留（2026-10-03）
+
+全库及后续采集排版 → content_layout.py、adapters/common.py、web/body_display.py → test_body_display.py、test_core.py、test_rule_repair.py；全库只读结果见 ../verification/body-layout-audit-2026-10-03.json。

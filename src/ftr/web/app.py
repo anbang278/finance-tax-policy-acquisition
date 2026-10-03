@@ -61,7 +61,7 @@ def create_app(data_dir: Path, settings: WebSettings | None = None) -> FastAPI:
             "connect-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'"
         )
         result.headers["Referrer-Policy"] = "no-referrer"
-        if request.url.path.startswith("/api/"):
+        if request.url.path.startswith(("/api/", "/static/")) or request.url.path == "/":
             result.headers["Cache-Control"] = "no-store"
         return result
 
