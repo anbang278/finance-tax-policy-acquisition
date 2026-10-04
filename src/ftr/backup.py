@@ -5,6 +5,8 @@ import shutil
 import sqlite3
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
+import portalocker
+
 from ftr.models import digest, utc_now
 
 
@@ -79,6 +81,12 @@ def create_backup(data_dir: Path, destination: Path) -> dict:
             shutil.copytree(data_dir / "evidence", destination / "evidence")
         if (data_dir / "rules").exists():
             shutil.copytree(data_dir / "rules", destination / "rules", symlinks=True)
+        if (data_dir / "commands").exists():
+            if (data_dir / "commands").is_symlink():
+                raise ValueError("命令目录不得为符号链接")
+            # Web enqueues outside the business write lock; freeze its spool separately.
+            with portalocker.Lock(str(data_dir / ".commands.lock"), timeout=1):
+                shutil.copytree(data_dir / "commands", destination / "commands", symlinks=True)
         manifest = {"created_at": utc_now().isoformat(), "files": _files(destination)}
         (destination / "manifest.json").write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"

@@ -38,3 +38,14 @@ ftr.yaml
 .workbench.json
 .workbench.log
 .workbench.lock
+
+# 本机定时服务状态与锁（不随备份恢复进程）
+.scheduler.lock
+.scheduler-heartbeat.json
+.scheduler-heartbeat-*.tmp
+
+# 本机管理后台凭据和控制状态
+.worker.json
+.worker.log
+.worker-start.lock
+.commands.lock

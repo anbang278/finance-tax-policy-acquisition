@@ -72,3 +72,17 @@ D-02 采用已确认的完整性优先回退：分页证据与检查点可追踪
 ## 全库与后续采集段落保留（2026-10-03）
 
 采集改用共享 body_text_of，而标题/文号等字段继续使用原 text_of。所有规则正文路径一致应用新版提取；共享模块纳入 Repair executor_fingerprint。可信样本旧 body 字段保留，新增 body_layout 明确新版排版，仍逐字符严格匹配，不放宽候选验证。
+
+## 定时获取实现（2026-10-03）
+
+新增 scheduler.py：时点/窗口预览、持久计划、冻结请求幂等恢复、轮转批次、有限重试/无进展与暂停、只读状态、停止事件和进程心跳。config/CLI/repository/Collector 接入；Web 及工作台子进程透传调度配置，新增只读 API 与监控区域。tzdata 随锁定依赖提供跨平台时区数据，SQLite 增量到 v3，旧任务摘要不改写。
+
+新增 tests/test_scheduler.py，旧迁移测试与独立 wheel 的当前版本预期更新到 v3；参数模板、操作/部署说明、授权契约与研发文档同步。Linux 服务模板位于 deploy/systemd，未安装或启动；真实源站、Linux 云端开机恢复与新远程 CI 未执行。实际测试结果见 ../verification/acceptance-report.md 本轮记录。
+
+## 本机管理实现增量（2026-10-03）
+
+新增 management.py（命令验证/队列/原子应用/复核查询）、worker.py（独立进程/实例控制/串行批次）、web/management.py（管理会话与接口）、static/manage.js（定时与复核页面）。workbench --manage 通过私有环境传递完整运行配置，一次性入口不入日志。scheduler 读取持久计划，支持停用期间明确一轮和来源本人暂停。Collector 定向补取不列举列表；备份加入 commands。验证见 test_management.py 与验收记录。
+
+## GitHub 更新检测实现（2026-10-04）
+
+新增共享 update_check.py、UpdateCheckSettings、update check/--force、setup 独立报告和启动阶段 stderr 提醒。Web lifespan 后台检测与 /api/update-status 快照，前端顶部显示版本及非弹窗提醒，资源标识 update-check-1。hatch_build.py 将提交、版本、dirty 身份映射到构建制品；独立 wheel 验证 sdist 身份一致与脱离源码识别。既有未提交定时/管理工作台改动保留，无迁移或发布版本变更。验证结果见 ../verification/acceptance-report.md 本轮记录。

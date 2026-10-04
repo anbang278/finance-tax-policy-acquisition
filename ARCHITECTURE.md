@@ -38,3 +38,19 @@ Web 为同源只读服务，默认回环；显式非回环地址允许团队局�
 运行数据库版本 2 增加 attachment_work 与 listing_pages；CLI 写入持独占锁并迁移，普通 Repository(readonly=True) 和 Web 只读快照不初始化、不迁移、不恢复任务。附件缺失先于列表推进恢复，补齐产生新提取版本，旧资料与复核保留。日期未知是范围信息，不是硬内容限制。
 
 diagnostics.task_report 为核心统一报告，供采集 data.report、只读 task list/report/missing 与 Web 消费。覆盖完整性、原件完整性、内容可读性与复核独立表达；失败事实脱敏后持久化，修复后保留 resolved 历史。分页记录实际请求与最终地址。未经证明的日期筛选不用于完成判定；预算后等待用户继续。
+
+## 持续定时获取（2026-10-03）
+
+新增 scheduler 模块和 RuntimeSettings.scheduler，默认关闭。常驻前台循环计算 IANA 时区的每日时点，首次启用立即回看含当天最近 30 天。单来源 rescan TaskRequest 冻结来源日期口径、范围与批次预算，分页仍完整枚举。scheduler_meta 保存配置/检查水位/最后执行来源；scheduler_sources 保存冻结待建请求、活动任务、合并窗口、重试和暂停；SQLite user_version 增量到 3。请求先持久化，create_task 使用稳定幂等键，关联前崩溃可复用原任务。
+
+独立 Portalocker 防重复调度；每批复用 runtime 写锁，轮转两来源，批间释放。停机从最早遗漏计划补漏；活动范围不改写。待复核不阻塞，源站访问限制/结构/未知故障持久暂停；瞬态失败额外最多三次重试，正常预算续跑但三批无进展暂停。仅管理自有任务，人工暂停不清除，取消任务不续跑；明确恢复来源后可处理未来窗口。
+
+每 15 秒原子写本机心跳（90 秒新鲜），不由 Web 写入或备份。API 使用只读快照并兼容无调度表旧库；配置当前值与最近运行值分别返回。Collector 可接收停止事件，SIGTERM 在请求检查点保存后退出。Linux 使用独立 systemd 服务 + Xvfb；无新模型调用、认证、宿主自动安装或自动 Repair。
+
+## 本机受保护管理增量
+
+默认 Web 仍只读 SQLite 快照。显式 --manage 的回环启动器签发一次性会话，HTTP 仅入队受限 Command。独立 ftr.worker 以实例握手和 .scheduler.lock 管理，串行取得 .runtime.lock；SQLite v4 保存持久计划、命令结果、草稿和不可覆盖轮次。AtomicConnection 在命令事务中延迟既有方法提交，使资料变化与命令完成原子保存。备份包含 commands，不包含私有会话与进程状态。
+
+## GitHub 更新检测（2026-10-04）
+
+共享 update_check 模块在启动边界执行固定官方 main 只读比较，OS 用户缓存与业务存储隔离。CLI/stdout JSON 协议保持，提醒用 stderr；Web 后台线程持有启动时冻结身份，API 只读内存快照。新构建包携带提交/版本/修改标记；普通 ZIP 缺身份不宣称最新。检测失败、限流和缓存故障不影响业务，未引入自动更新、数据库迁移或新的 Repair 权限。

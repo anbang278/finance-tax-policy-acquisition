@@ -80,6 +80,10 @@ setup 自动准备用户级 uv、Python 3.13 和锁定依赖，优先复用可�
 
 团队局域网工作台不增加认证，能够访问监听地址的成员可查询及下载已保存资料。请在部署前评估网络暴露范围。
 
+## 版本变更
+
+当前版本为 `0.1.1`；变更与升级边界见 [CHANGELOG](CHANGELOG.md)，验证证据见验收记录及 GitHub Actions。
+
 ## 许可证
 
 本项目依据 Apache License 2.0 发布，详见 [LICENSE](LICENSE)。
@@ -107,3 +111,15 @@ setup 自动准备用户级 uv、Python 3.13 和锁定依赖，优先复用可�
 政策日期不明确时保存为空，仍可采集成功并按正常门禁复核；日期未知不等于属于指定日期区间，日期筛选会保留并标明这些资料。官网日期筛选的完整覆盖未被证明时，继续按栏目逐页核查，不能仅遇到旧日期便宣告完成。
 
 Agent 可只读调用 `task list`、`task report --task ID` 和 `task missing --task ID`，普通用户无需输入任务 ID。Office/扫描件保留原件，查看方式与解析限制分开说明。升级前报告见[体验审计](docs/verification/usability-audit-2026-10-03.md)，本轮结果见[升级复验](docs/verification/usability-upgrade-2026-10-03.md)。
+
+## 持续获取最新政策
+
+新增可选定时服务：北京时间每天 09:00、18:00 回看最近 30 天，自动续跑、补正文与附件，并在采集监控显示计划、积压和异常。默认关闭，启用后独立于 Agent 会话运行；未复核资料仍受原有研究门禁约束。Linux 服务模板、启停与验收边界见[定时获取指南](docs/guides/scheduled-acquisition.md)。
+
+## 本机管理工作台
+
+`ftr --config /绝对路径/ftr.local.yaml workbench start --manage --open` 打开本人管理入口，新增定时任务与资料复核。普通启动和非回环监听仍只读。先预览再保存，操作入队与实际生效分别展示；后台关闭页面后继续运行。详见 [本机管理操作](docs/guides/local-management.md)。
+
+## 项目代码更新提醒
+
+启动采集或工作台时默认检查官方 main，有更新时提醒并继续；工作台顶部显示版本状态。手动入口 `sh scripts/run.sh update check`（Windows 使用 run.ps1），`--force` 重新检查；离线可关闭。ZIP 缺提交身份时明确无法确认。详见[更新检测](docs/guides/update-check.md)。

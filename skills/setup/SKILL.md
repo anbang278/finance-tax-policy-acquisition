@@ -18,3 +18,7 @@ description: 财税采集或工作台首次使用前检测并自动补装用户�
 读取最后一条 JSON 的 state、stage、error_code、next_step、runner、version、python、config、data_dir、checks 和 browser。只有 ENVIRONMENT_READY 才继续对应能力。后续优先用返回的绝对 runner（macOS shell、Windows PowerShell），它隔离 PYTHONHOME/PYTHONPATH、固定解释器与配置且不重复安装；直接命令调用时也须仅在子进程中隔离这两个变量，使用绝对 `python -m ftr.cli --config config`，需要覆盖资料目录时显式 `--data-dir`。不依赖 PATH 中 ftr，不再执行会移除额外依赖的默认 uv run。
 
 区分依赖安装、浏览器启动、源站可访问。setup 不访问政策源站或初始化资料库。原请求是采集时回到 Controller 继续原请求；原请求只安装/查询时不采集。安装不授权宿主插件安装、真实采集或开放局域网。
+
+## 项目更新提醒
+
+setup 报告的 update_check、运行入口的 stderr 和工作台版本状态均由 Python 检测。UPDATE_AVAILABLE 时简短说明本地提交与官方 main 提交，建议任务结束后更新并继续原请求；本地有修改时提醒保留。UNKNOWN/CHECK_FAILED 如实说明无法确认或检查失败，不中断原请求、不把同版本号当作已最新。可用绝对 runner 调用 `update check` 获取结构化结果，`--force` 请求重新检查（服务端限流仍须等待）。不自行下载、覆盖或执行 git pull；更新执行需要用户另行授权。

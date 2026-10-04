@@ -9,3 +9,27 @@
 #overview>.body-note{grid-column:1/-1;margin:0;overflow-wrap:anywhere}
 
 .policy-body{font-size:16px;line-height:1.9;margin-inline:auto}.structured-body{white-space:normal}.body-block{white-space:pre-wrap;text-indent:2em;margin:0 0 .9em}.body-block.align-center{text-align:center;text-indent:0;font-weight:600}.body-block.align-right{text-align:right;text-indent:0}.body-heading{text-indent:0;font-weight:600}.body-block:last-child{margin-bottom:0}
+
+.scheduler-panel{border:1px solid var(--line);border-radius:7px;background:#fff;padding:14px;margin-bottom:12px;font-size:11px;line-height:1.8;flex-shrink:0;max-height:35vh;overflow:auto}.scheduler-heading{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}.scheduler-heading span,.scheduler-panel p{color:#718298}.scheduler-sources{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:10px}.scheduler-source{border-top:1px solid var(--line);padding-top:10px;overflow-wrap:anywhere}.scheduler-warning{color:var(--amber)!important}@media(max-width:760px){.scheduler-sources{grid-template-columns:1fr}.scheduler-panel{max-height:30vh}}
+
+.management-scroll{overflow:auto;gap:18px;padding:4px 0 20px}
+.management-card{background:#fff;border:1px solid var(--line,#dbe3ed);border-radius:12px;padding:22px}
+.management-card h2,.management-card h3{margin:0 0 12px}.management-card p{line-height:1.6}
+.management-fields,.management-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:16px 0}
+.management-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+#schedule-form label,#review-form label{display:flex;flex-direction:column;gap:7px;font-size:13px}
+#schedule-form input,#review-form select,#review-form textarea{padding:10px;border:1px solid #cbd5e1;border-radius:6px;width:100%;font:inherit}
+fieldset{border:0;padding:0;min-width:0}.management-actions{display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}
+label.check{display:inline-flex!important;flex-direction:row!important;align-items:center;gap:8px!important;margin:8px 16px 8px 0}
+label.check input{width:auto!important}.review-filter{padding:10px 0}.review-filter select{margin-left:12px;padding:8px}
+.review-row{display:block;text-align:left;width:100%;padding:18px;border:0;border-bottom:1px solid #e2e8f0;background:white;cursor:pointer}
+.review-row small,#operation-list small{display:block;color:#64748b;margin-top:8px}.review-row.selected{background:#eef5ff}
+.review-body{white-space:pre-wrap;font-family:inherit;font-size:14px;line-height:1.9;overflow-wrap:anywhere}.review-workspace #review-detail{padding:22px}
+#review-form textarea{resize:vertical}#management-operations{padding:10px 16px;border-top:1px solid #e2e8f0;max-height:160px;overflow:auto}
+#operation-list{list-style:none;padding:0}#operation-list li{padding:8px 0}#management-message:not(:empty){padding:12px 20px;background:#eef5ff;font-size:13px}
+@media(max-width:760px){.management-fields,.management-grid{grid-template-columns:1fr}.review-workspace{display:flex;flex-direction:column;overflow:auto}.review-workspace .list-pane{flex:none;width:100%;max-height:200px}.review-workspace .detail-pane{flex:none;overflow:visible}.management-card{padding:16px}.management-scroll{padding-bottom:20px}#management-mode{font-size:11px;overflow-wrap:anywhere}}
+@media(max-width:760px){.review-workspace .detail-pane{display:block!important}.review-workspace .list-pane{display:block!important}}
+
+.update-notice { margin: 12px 24px 0; padding: 10px 14px; background: #fff5dc; color: #644b14; border: 1px solid #e7d5a7; border-radius: 8px; overflow-wrap: anywhere; font-size: 13px; }
+.update-version { color: #64748b; font-size: 12px; overflow-wrap: anywhere; }
+@media (max-width: 600px) { .update-version { max-width: 100px; font-size: 10px; } .update-notice { margin: 8px 12px 0; } }

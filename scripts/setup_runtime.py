@@ -107,7 +107,13 @@ def prepare(capability: str, project: Path) -> dict:
     ready = report["core_dependencies_ready"] and report["python"]["supported"] and error is None
     if capability in ("workbench", "all"):
         ready = ready and report["web_dependencies_ready"]
+    from ftr.update_check import check_for_updates, emit_notice
+
+    update = check_for_updates(settings, root=project) if ready else None
+    if update:
+        emit_notice(update)
     return {
+        "update_check": update,
         "state": "ENVIRONMENT_READY" if ready else "BLOCKED",
         "stage": "verification",
         "capability": capability,

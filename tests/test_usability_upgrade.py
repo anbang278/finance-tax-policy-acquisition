@@ -421,7 +421,7 @@ def test_old_schema_readonly_migration_backup_and_legacy_request(tmp_path):
     restore_backup(backup, restored)
     repo = Repository(restored)
     try:
-        assert repo.db.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert repo.db.execute("PRAGMA user_version").fetchone()[0] == 4
         assert repo.task(task)["request_digest"] == old_digest
         assert "legacy_field" in repo.task(task)["request_json"]
     finally:

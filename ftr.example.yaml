@@ -26,3 +26,16 @@ web:
   port: 8765
   poll_interval_ms: 5000
   request_timeout_ms: 10000
+scheduler:
+  enabled: false  # 明确授权后启用；systemd/YAML 变更需重启；本机持久计划优先
+  timezone: Asia/Shanghai
+  times: ['09:00', '18:00']
+  lookback_days: 30  # 含当天；首次启用立即执行该窗口
+  batch_interval_seconds: 60  # 同来源批次间隔；来源串行轮转
+  retry_delays_seconds: [300, 900, 3600]  # 请求级重试之外最多 3 次；空列表不追加重试
+
+update_check:
+  enabled: true  # 官方 main 检测，只提醒；离线环境可关闭
+  cache_seconds: 86400  # 成功结果缓存 24 小时
+  failure_retry_seconds: 3600  # 检查失败退避 1 小时
+  timeout_seconds: 3  # 每轮联网检查总截止时间

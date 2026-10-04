@@ -119,10 +119,32 @@ def status(root):
     return {"state": "STOPPED"}
 
 
-def manage(root, action, *, open_browser=False, web_settings=None):
+def manage(
+    root,
+    action,
+    *,
+    open_browser=False,
+    web_settings=None,
+    scheduler_settings=None,
+    management=False,
+    runtime_settings=None,
+):
     root = root.resolve()
+    if runtime_settings is not None:
+        runtime_settings = runtime_settings.model_copy(update={"data_dir": root})
     if not (root / "database.sqlite3").is_file():
         raise ValueError("尚无资料库，请先明确范围并采集；不会自动创建资料库")
+    if action in ("background-status", "background-stop"):
+        from ftr.worker import identity, public_status, stop_owned
+
+        if action == "background-status":
+            return public_status(root)
+        stop_owned(root)
+        for _ in range(100):
+            if identity(root) is None:
+                return {"state": "STOPPED"}
+            time.sleep(0.1)
+        return {"state": "STOPPING", "next_step": "后台在安全检查点停止；等待请求超时后重查状态"}
     if action == "status":
         return status(root)
     lock_path = root / ".workbench.lock"
@@ -142,16 +164,18 @@ def manage(root, action, *, open_browser=False, web_settings=None):
             return {"state": "STOPPED"}
         if action != "start":
             raise ValueError("未知工作台动作")
+        if current["state"] == "RUNNING" and bool(_state(root).get("management")) != management:
+            raise ValueError("工作台模式不同；请先 workbench stop，再用 --manage 重新启动")
         if current["state"] != "RUNNING":
             # Fail before spawning if the optional extra is absent.
             try:
                 import uvicorn  # noqa: F401
 
-                from ftr.web.app import create_app
+                from ftr.web.app import create_app  # noqa: F401
             except ImportError as exc:
                 raise WorkbenchError("DEPENDENCIES_MISSING") from exc
 
-            create_app(root)
+            # Construct the app only in the owned child, not during dependency probing.
             from ftr.config import WebSettings
 
             settings = web_settings or WebSettings()
@@ -175,6 +199,8 @@ def manage(root, action, *, open_browser=False, web_settings=None):
                     if key not in ("PYTHONHOME", "PYTHONPATH")
                 }
                 env.update(FTR_WORKBENCH_TOKEN=token, FTR_WORKBENCH_INSTANCE=instance_id)
+                if runtime_settings is not None:
+                    env["FTR_WORKBENCH_SETTINGS"] = runtime_settings.model_dump_json()
                 command = [
                     sys.executable,
                     "-m",
@@ -188,6 +214,10 @@ def manage(root, action, *, open_browser=False, web_settings=None):
                     "--timeout",
                     str(settings.request_timeout_ms),
                 ]
+                if management:
+                    command += ["--manage"]
+                if scheduler_settings is not None:
+                    command += ["--scheduler-settings", scheduler_settings.model_dump_json()]
                 options = (
                     {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
                     if sys.platform == "win32"
@@ -207,6 +237,7 @@ def manage(root, action, *, open_browser=False, web_settings=None):
                     except OSError as exc:
                         raise WorkbenchError("SPAWN_FAILED", port=port) from exc
                 state = {
+                    "management": management,
                     "launcher_pid": process.pid,
                     "port": port,
                     "token": token,
@@ -267,9 +298,33 @@ def manage(root, action, *, open_browser=False, web_settings=None):
                 raise WorkbenchError(code, port=port, exit_code=process.poll(), log_summary=summary)
             else:
                 raise WorkbenchError("PORTS_OCCUPIED")
+        if management:
+            from ftr.config import RuntimeSettings, SchedulerSettings
+            from ftr.management import effective_plan, operations
+            from ftr.worker import ensure_worker
+
+            runtime = runtime_settings or RuntimeSettings(
+                data_dir=root, scheduler=scheduler_settings or SchedulerSettings()
+            )
+            if effective_plan(root, runtime.scheduler)["settings"]["enabled"] or any(
+                item["state"] in ("QUEUED", "RUNNING") for item in operations(root, limit=None)
+            ):
+                try:
+                    current["background"] = ensure_worker(runtime)
+                except ValueError as exc:
+                    current["background"] = {"state": "BLOCKED", "next_step": str(exc)}
         if open_browser:
             try:
-                current["browser_opened"] = bool(webbrowser.open(current["url"]))
+                url = current["url"]
+                if management:
+                    state = _state(root)
+                    with httpx.Client(trust_env=False, timeout=2) as client:
+                        bootstrap = client.get(
+                            url + "/_control/session", headers={"X-FTR-Token": state["token"]}
+                        )
+                        bootstrap.raise_for_status()
+                        url += "#manage-token=" + bootstrap.json()["token"]
+                current["browser_opened"] = bool(webbrowser.open(url))
             except Exception:  # noqa: BLE001
                 current["browser_opened"] = False
         return current
@@ -280,22 +335,40 @@ def child():
     from fastapi import Request
     from fastapi.responses import JSONResponse
 
-    from ftr.config import WebSettings
+    from ftr.config import RuntimeSettings, SchedulerSettings, WebSettings
     from ftr.web.app import create_app
+    from ftr.web.management import ManagementSession
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--directory", type=Path, required=True)
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--poll", type=int, default=5000)
     parser.add_argument("--timeout", type=int, default=10000)
+    parser.add_argument("--scheduler-settings")
+    parser.add_argument("--manage", action="store_true")
     args = parser.parse_args()
     token = os.environ.pop("FTR_WORKBENCH_TOKEN")
     instance_id = os.environ.pop("FTR_WORKBENCH_INSTANCE", None)
+    session = ManagementSession() if args.manage else None
+    runtime = os.environ.pop("FTR_WORKBENCH_SETTINGS", None)
     app = create_app(
-        args.directory, WebSettings(poll_interval_ms=args.poll, request_timeout_ms=args.timeout)
+        args.directory,
+        WebSettings(poll_interval_ms=args.poll, request_timeout_ms=args.timeout),
+        SchedulerSettings.model_validate_json(args.scheduler_settings)
+        if args.scheduler_settings
+        else None,
+        management_session=session,
+        runtime_settings=RuntimeSettings.model_validate_json(runtime) if runtime else None,
     )
     server = uvicorn.Server(
-        uvicorn.Config(app, host="127.0.0.1", port=args.port, log_level="warning", access_log=False)
+        uvicorn.Config(
+            app,
+            host="127.0.0.1",
+            port=args.port,
+            log_level="warning",
+            access_log=False,
+            proxy_headers=False,
+        )
     )
 
     # Request annotation must be a runtime type (function-local import + postponed annotations).
@@ -303,6 +376,10 @@ def child():
         supplied = request.headers.get("X-FTR-Token", "")
         if not hmac.compare_digest(supplied, token):
             return JSONResponse({"error": "forbidden"}, status_code=403)
+        if request.url.path == "/_control/session":
+            if session is None:
+                return JSONResponse({"error": "readonly"}, status_code=403)
+            return {"token": session.issue()}
         identity = {
             "pid": os.getpid(),
             "directory": str(args.directory.resolve()),
@@ -314,6 +391,7 @@ def child():
 
     control.__annotations__["request"] = Request
     app.add_api_route("/_control", control, methods=["GET", "POST"], include_in_schema=False)
+    app.add_api_route("/_control/session", control, methods=["GET"], include_in_schema=False)
     server.run()
 
 

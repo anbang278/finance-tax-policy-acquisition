@@ -100,3 +100,21 @@ TaskRequest 新输入禁止额外字段，历史读取只取已知字段而保�
 ## 全库与后续采集段落保留（2026-10-03）
 
 content_layout.extract_blocks 为采集与展示共用的纯文本结构提取。段落之间使用两个换行，br 使用单换行；嵌套行内容器中的段落也保留，评论/脚本/样式不进入正文。table 行边界保留、单元格文字以空格分隔；展示中的纯图片空表格不再触发整篇回退，含文字的复杂表格仍回退保存文本。新 parse_detail 标注 parser_version=0.1.4；原件未变但重新提取正文改变时沿用现有提取版本机制，旧摘要保持原样。
+
+## 定时获取设计（2026-10-03）
+
+独立前台调度 + systemd 托管，复用 Collector、TaskRequest/rescan、诊断及原写锁。scheduler_meta/scheduler_sources 增量迁移为 schema v3；冻结请求先保存，再幂等建任务并登记关联，避免崩溃产生重复。活动任务每来源一个，等待窗口合并起止日期；各来源单独任务串行轮转，预算沿用冻结页数/资料数与当前时间/字节配置。
+
+last_check 为计划水位，补漏使用 earliest next_slot 至 latest due_slot；首次启用从当前回看窗口开始。人工暂停/取消和来源故障是独立持久状态；正常预算不计失败，瞬态失败额外三轮，连续三批无队列/检查点进展暂停。Collector 停止事件与已有 SIGINT/SIGTERM 检查点协同。只读状态、preview、API 不初始化或迁移；本机原子心跳单独保存，不入备份。当前工作台配置与最近运行配置分别展示。操作接口与部署见 ../guides/scheduled-acquisition.md。
+
+## 本机管理设计增量（2026-10-03）
+
+管理入口两分钟一次性兑换，HttpOnly/SameSite=Strict Cookie，重启失效；写接口检查回环客户端、Origin、Sec-Fetch-Site、会话。业务 SQLite 无 HTTP 写入：commands 文件入队，后台单写者应用预期版本，保存结果；命令 ID 与输入绑定。v4 managed_plan/review_workspace/review_rounds/management_operations 均增量迁移。复核摘要使用原 record_json；快照与 SemanticDecision 保留，重新复核产生新轮。补取调用 Collector.recover_record，仅使用选定资料登记地址。详情轮询保持表单和阅读位置。
+
+## GitHub 更新检测设计（2026-10-04）
+
+update_check.py 固定官方 repository/main，读取实际模块根目录的 Git 身份并使用 --no-optional-locks；相同 SHA、已证明本地祖先关系或 GitHub Compare 决定状态，其余 UNKNOWN。不 fetch、不信任 origin，版本号不决定源码一致。匿名 httpx 客户端复用代理且禁用重定向，无政策 Cookie；有界 daemon 请求线程隔离 DNS/慢响应等待，流读取限制 2 MB，失败只返回固定分类。
+
+RuntimeSettings.update_check 管理启用/缓存/退避/超时。OS 用户缓存按安装路径隔离，原子文件+独立非阻塞 Portalocker；身份改变重新比较，失败保留 last_success 并标过期，服务端限流不能被 force 绕过。Web lifespan 管理 UpdateMonitor，启动时冻结身份和代码指纹，每分钟检查缓存/磁盘变化，GET 仅读内存。build hook 用临时目录映射身份到 sdist/wheel，sdist 二次构建保留来源信息；源码目录无生成制品。
+
+CLI update check 用 OperationResponse.data；状态为 UP_TO_DATE/UPDATE_AVAILABLE/LOCAL_AHEAD/DIVERGED/UNKNOWN/CHECK_FAILED/DISABLED。更新结果不进入 TaskRequest、业务 SQLite 或 Repair 门禁。完整操作契约见 ../guides/update-check.md。

@@ -7,8 +7,8 @@
   <meta name="description" content="查询已采集的财税资料，观察采集任务与发现队列。">
   <title>政策工作台</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/style.css?v=body-layout-2">
-  <script type="module" src="/static/app.js?v=body-layout-2"></script>
+  <link rel="stylesheet" href="/static/style.css?v=update-check-1">
+  <script type="module" src="/static/app.js?v=update-check-1"></script>
 </head>
 <body>
   <div class="shell">
@@ -18,13 +18,23 @@
       <nav aria-label="主导航">
         <a class="nav-item active" href="#policies" data-view="policies"><span data-icon="library"></span>政策库<span id="nav-policy-count" class="nav-count">—</span></a>
         <a class="nav-item" href="#tasks" data-view="tasks"><span data-icon="activity"></span>采集监控<span id="nav-task-count" class="nav-count">—</span></a>
+        <a class="nav-item" href="#scheduler" data-view="scheduler" title="定时任务"><span data-icon="clock"></span>定时任务</a>
+        <a class="nav-item" href="#reviews" data-view="reviews" title="资料复核"><span data-icon="review"></span>资料复核</a>
       </nav>
       <div class="side-bottom"><button id="sources-open" class="source-button"><span data-icon="globe"></span>查看采集来源<span data-icon="arrow"></span></button><div class="local-note"><i></i>只读政策工作台<small>资料保存与复核状态分别展示</small></div></div>
     </aside>
     <main class="main">
-      <header class="topbar"><span class="breadcrumb">工作空间 <span>/</span> <strong id="view-name">政策库</strong></span><div class="topbar-actions"><span id="connection" class="connection">连接中</span><button id="refresh" class="button subtle"><span data-icon="refresh"></span><span>刷新</span></button></div></header>
+      <header class="topbar"><span class="breadcrumb">工作空间 <span>/</span> <strong id="view-name">政策库</strong></span><div class="topbar-actions"><span id="update-version" class="update-version"></span><span id="connection" class="connection">连接中</span><button id="refresh" class="button subtle" aria-label="刷新"><span data-icon="refresh"></span><span>刷新</span></button></div></header>
+      <div id="update-notice" class="update-notice" role="status" aria-live="polite" hidden></div>
       <div id="error-banner" class="error-banner" role="status" hidden></div>
       <section class="page-heading"><div><div class="eyebrow" id="eyebrow">POLICY LIBRARY</div><h1 id="page-title">政策库</h1><p id="page-description">找到资料，读到原文，保留每一份证据。</p></div><div id="overview" class="overview"><span>正在读取资料库资料…</span></div></section>
+      <div id="management-mode" class="monitor-note"></div><div id="management-message" role="status" aria-live="polite"></div>
+      <section id="scheduler-view" class="view management-scroll" hidden>
+        <section class="management-card"><h2>定时获取计划</h2><p id="plan-state"></p><p id="next-schedule"></p><form id="schedule-form"></form><p id="schedule-preview" role="status"></p></section>
+        <section class="management-card"><h2>立即获取一轮</h2><p>明确本次窗口后执行，即使日常计划停用也可以获取这一轮。</p><label class="check"><input type="checkbox" name="now-source" value="mof" checked>财政部</label><label class="check"><input type="checkbox" name="now-source" value="chinatax" checked>国家税务总局</label><div class="management-actions"><button class="button" data-manage="now-preview">预览本轮窗口</button><button id="run-now" class="button" data-manage="now" disabled>确认并获取本轮</button></div><p id="run-window"></p></section><div id="source-controls" class="management-grid"></div>
+      </section>
+      <section id="reviews-view" class="view" hidden><label class="review-filter">处理队列<select id="review-category"><option value="pending">待复核</option><option value="limited">内容受限</option><option value="further">需进一步核查</option><option value="done">已处理</option><option value="all">全部最新资料</option></select></label><div class="workspace review-workspace"><section id="review-list" class="list-pane scroll" aria-label="复核资料队列"></section><section id="review-detail" class="detail-pane scroll" aria-label="人工复核详情"><p>选择资料逐条核对正文和证据。</p></section></div></section>
+      <details id="management-operations"><summary>管理操作执行记录</summary><ul id="operation-list"></ul></details>
       <section id="policies-view" class="view">
         <form id="policy-filters" class="filters" aria-label="政策筛选">
           <label class="search-field"><span data-icon="search"></span><input name="q" id="policy-search" placeholder="搜索标题、文号或正文" aria-label="搜索政策" maxlength="500"><kbd>↵</kbd></label>
@@ -43,7 +53,7 @@
         </div>
       </section>
       <section id="tasks-view" class="view" hidden>
-        <div class="monitor-note"><span data-icon="info"></span>依据数据库记录观察队列与结果；未接入进程心跳，无法确定此刻的下载项。</div>
+        <section id="scheduler-status" class="scheduler-panel" aria-label="定时获取状态"><p>正在读取定时计划…</p></section><div class="monitor-note"><span data-icon="info"></span>定时心跳与任务记录分别展示；资料采集完成后仍需复核。</div>
         <div class="workspace" id="task-workspace">
           <section class="list-pane" aria-label="采集任务列表"><div class="pane-heading"><strong>采集任务</strong><select id="task-state" aria-label="任务状态"></select></div><div id="task-list" class="scroll list-content"></div><div id="task-pagination" class="pagination"></div></section>
           <section id="task-detail" class="detail-pane scroll" aria-label="采集任务详情"><div class="empty-state"><span data-icon="activity"></span><h2>选择一个采集任务</h2><p>查看发现队列、来源进度与失败记录。</p></div></section>

@@ -78,3 +78,35 @@ A05 按本轮确认改为“错误内容或错误分类不得通过”；合法�
 ## 全库与后续采集段落保留（2026-10-03）
 
 全库及后续采集排版 → content_layout.py、adapters/common.py、web/body_display.py → test_body_display.py、test_core.py、test_rule_repair.py；全库只读结果见 ../verification/body-layout-audit-2026-10-03.json。
+
+## 定时获取追踪（2026-10-03）
+
+| 确认能力 | 实现 | 验证入口 |
+|---|---|---|
+| 双时点与 30 天持续回看 | scheduler 时点/窗口、单来源 rescan TaskRequest | test_scheduler 时区/迟到文件/14 天以上更新 |
+| 自动续跑与停机补漏 | 持久水位、活动任务/合并窗口、轮转、幂等键 | 40 天停机、预算/崩溃恢复/附件跨窗 |
+| 故障隔离与人工边界 | 来源暂停、额外重试/无进展、人工标记 | 网络耗尽、单源故障、暂停取消/手动任务 |
+| 可观察与 Linux 托管 | CLI/API/工作台、心跳、systemd 模板 | 只读/Chromium/信号/锁/wheel；云端待验 |
+| 数据兼容与质量 | schema v3、原版本/复核门禁保持 | 旧库/备份迁移、版本去重/原记录不变 |
+
+## 本机管理追踪（2026-10-03）
+
+| 要求 | 实现 | 隔离验证 |
+|---|---|---|
+| 一次性管理及跨源拒绝 | web/management.py, workbench.py | test_session_single_use_origin_readonly_and_remote |
+| 幂等、版本、崩溃事务 | management.py, repository.AtomicConnection | test_queue_is_readonly_and_apply_idempotent, test_stale_plan_conflict, test_atomic_rollback_on_crash_and_replay |
+| 独立后台与互斥 | worker.py, scheduler.py | test_detached_worker_duplicate_identity_lock_and_restart, test_independent_scheduler_refuses_takeover |
+| 冻结请求、停用、窗口合并 | scheduler.py, management.py | test_one_off_disabled_and_source_pause；既有 test_scheduler.py |
+| 人工门禁、草稿、轮次 | management.py | test_draft_review_reopen_immutable_rounds, test_hard_limits_forbid_pass_without_existing_decision, test_stale_version_preserves_draft |
+| 定向补取与新版本 | Collector.recover_record | test_recovery_atomic_version_and_no_arbitrary_url；test_real_collector_targeted_recovery_atomic, test_real_recovery_budget_partial_checkpoint_and_resume |
+| 备份不恢复会话 | backup.py | test_backup_pending_commands_excludes_sessions |
+| 页面/窄屏/后台继续 | static/manage.js | test_browser_management_review_draft_plan_narrow_and_detached |
+
+## GitHub 更新检测追踪（2026-10-04）
+
+| 要求 | 实现 | 验证 |
+|---|---|---|
+| main 身份与提交关系 | update_check.local_identity/_compare | test_update_check 的相同/祖先/分叉/浅克隆/未知/脏工作区 |
+| 失败不阻断与缓存 | check_for_updates、CLI/setup | 截止时间、限流/退避/缓存过期/损坏/无权限/锁/原业务结果 |
+| 工作台后台及运行身份 | UpdateMonitor、/api/update-status、前端 | lifespan/查询不等待/冻结身份/Chromium 桌面窄屏与状态刷新 |
+| 构建制品来源 | hatch_build.py、verify_wheel.py | sdist→wheel 身份一致、独立安装识别 |

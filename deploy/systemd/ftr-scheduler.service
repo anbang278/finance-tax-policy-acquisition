@@ -1,0 +1,21 @@
+[Unit]
+Description=Finance tax policy scheduled acquisition
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=ftr
+Group=ftr
+WorkingDirectory=/opt/ftr
+Environment=PYTHONUTF8=1
+ExecStart=/usr/bin/xvfb-run -a /opt/ftr/.venv/bin/ftr --config /etc/ftr/ftr.yaml scheduler run
+Restart=on-failure
+RestartSec=30
+TimeoutStopSec=120
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

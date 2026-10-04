@@ -268,7 +268,7 @@ def test_queries_do_not_write_or_take_the_collector_lock(web_data):
     root, client, repo = web_data["root"], web_data["client"], web_data["repo"]
     before = (root / "database.sqlite3").read_bytes()
     with data_lock(root):
-        for path in ("/api/overview", "/api/policies", "/api/tasks"):
+        for path in ("/api/overview", "/api/policies", "/api/tasks", "/api/update-status"):
             assert client.get(path).status_code == 200
     assert (root / "database.sqlite3").read_bytes() == before
     # 新的请求读取采集进程刚提交的状态；没有缓存旧快照或共享线程连接。
@@ -543,8 +543,8 @@ def test_missing_corrupt_and_valid_evidence_are_read_only(web_data):
 
 def test_ui_assets_do_not_keep_stale_layout(web_data):
     client = web_data["client"]
-    for route in ("/", "/static/app.js?v=body-layout-2", "/static/style.css?v=body-layout-2"):
+    for route in ("/", "/static/app.js?v=update-check-1", "/static/style.css?v=update-check-1"):
         result = client.get(route)
         assert result.status_code == 200
         assert result.headers["cache-control"] == "no-store"
-    assert "app.js?v=body-layout-2" in client.get("/").text
+    assert "app.js?v=update-check-1" in client.get("/").text

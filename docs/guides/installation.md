@@ -131,3 +131,13 @@ uv run --extra web ftr --config /srv/ftr/ftr.yaml serve --host 0.0.0.0 --port 87
 使用浏览器访问 `http://服务器实际IP:8765`；`0.0.0.0` 不是客户端访问地址。IPv6 示例：监听 `--host ::`，访问 `http://[服务器IPv6]:8765`。客户端需能到达该端口，网络或操作系统防火墙的放行由部署环境负责。本次不新增认证或访问名单。
 
 前台按 `Ctrl+C` 停止。服务器常驻运行由部署者接入已有进程管理器，明确工作目录、安装环境、绝对配置路径和运行用户；本次不新增定时采集或后台 Agent。工作台 lifecycle 命令可以单独管理只读查询进程。
+
+## 可选 Linux 定时服务
+
+新增独立于宿主会话的定时采集核心，默认关闭。服务器锁定依赖包含 tzdata，以便跨系统使用 IANA 时区；两来源持续运行需要 Chromium 及 Xvfb/xauth。服务模板和非 root 用户、绝对配置/数据路径、启停及独立验收步骤见[定时获取](scheduled-acquisition.md)。代码交付不会自行安装系统服务或发起采集。
+
+本机工作台管理为已有 web extra 的能力：`workbench start --manage --open`，不安装系统服务；普通启动保持只读。补取或税务定时仍需要既有 Chromium 与正确显示环境。详见 [本机管理](local-management.md)。
+
+## 安装包代码身份
+
+Git clone 保留实际提交身份；新 sdist/wheel 内置构建提交、版本和修改标记，构建不写生成文件到源码。普通 Download ZIP 和旧包可能无身份，相同版本号不能证明已最新，更新检测显示 UNKNOWN。setup 返回独立 update_check，检测失败不影响 ENVIRONMENT_READY。详见[更新检测](update-check.md)。

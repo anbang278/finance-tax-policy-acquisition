@@ -86,21 +86,38 @@ def associated_document(db, task_id, source_id, canonical_url):
     ).fetchone()
 
 
+class AtomicConnection(sqlite3.Connection):
+    """Allow the managed writer to group legacy per-method commits atomically."""
+
+    defer_commit = False
+
+    def commit(self):
+        if not self.defer_commit:
+            super().commit()
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if self.defer_commit:
+            return False
+        return super().__exit__(exc_type, exc_value, traceback)
+
+
 class Repository:
     def __init__(self, data_dir: Path, *, readonly: bool = False):
         self.path = data_dir / "database.sqlite3"
         if readonly:
             if not self.path.is_file():
                 raise FileNotFoundError("任务数据库不存在；请先采集资料")
-            self.db = sqlite3.connect(self.path.resolve().as_uri() + "?mode=ro", uri=True)
+            self.db = sqlite3.connect(
+                self.path.resolve().as_uri() + "?mode=ro", uri=True, factory=AtomicConnection
+            )
             self.db.row_factory = sqlite3.Row
             self.db.execute("BEGIN")
             return
         data_dir.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(self.path)
+        self.db = sqlite3.connect(self.path, factory=AtomicConnection)
         self.db.row_factory = sqlite3.Row
         version = self.db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 2:
+        if version > 4:
             self.db.close()
             raise ValueError("数据库版本高于当前程序，请升级程序后再写入")
         self.db.executescript(SCHEMA)
@@ -122,6 +139,46 @@ class Repository:
                     PRIMARY KEY(task_id,source_id,page)
                 );
                 PRAGMA user_version=2;
+                COMMIT;
+            """)
+        if version < 3:
+            self.db.executescript("""
+                BEGIN;
+                CREATE TABLE IF NOT EXISTS scheduler_meta (
+                    id INTEGER PRIMARY KEY CHECK(id=1), config_json TEXT NOT NULL,
+                    last_check TEXT NOT NULL, last_source TEXT
+                );
+                CREATE TABLE IF NOT EXISTS scheduler_sources (
+                    source_id TEXT PRIMARY KEY, state_json TEXT NOT NULL
+                );
+                PRAGMA user_version=3;
+                COMMIT;
+            """)
+
+        if version < 4:
+            self.db.executescript("""
+                BEGIN;
+                CREATE TABLE IF NOT EXISTS managed_plan (
+                    id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL,
+                    applied_revision INTEGER NOT NULL, settings_json TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS management_operations (
+                    id TEXT PRIMARY KEY, command_json TEXT NOT NULL, state TEXT NOT NULL,
+                    result_json TEXT NOT NULL, completed_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS review_workspace (
+                    record_id TEXT PRIMARY KEY REFERENCES documents(id),
+                    revision INTEGER NOT NULL, open_round INTEGER NOT NULL,
+                    draft_json TEXT, submitted INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE TABLE IF NOT EXISTS review_rounds (
+                    id TEXT PRIMARY KEY, record_id TEXT NOT NULL REFERENCES documents(id),
+                    round INTEGER NOT NULL, decision_id TEXT NOT NULL REFERENCES decisions(id),
+                    snapshot_json TEXT NOT NULL, result_json TEXT NOT NULL,
+                    actor TEXT NOT NULL, submitted_at TEXT NOT NULL,
+                    UNIQUE(record_id,round)
+                );
+                PRAGMA user_version=4;
                 COMMIT;
             """)
 

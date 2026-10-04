@@ -95,3 +95,31 @@ web:
 ## 体验升级口径（2026-10-03）
 
 本轮没有新增 RuntimeSettings 参数。collection.max_duration_seconds 仍为单次运行两来源共享的检查点预算；网络调用有自身请求超时，不能把检查点预算称为硬超时。页数、资料数预算仍按每来源本批计算。业务 TaskRequest 未知字段现在拒绝，不会静默扩大为默认两来源；旧任务读入保留原始请求及摘要。
+
+## 定时运行参数（2026-10-03）
+
+| YAML 字段 | 环境变量 | 默认值 | 校验与作用 |
+|---|---|---|---|
+| `scheduler.enabled` | `FTR_SCHEDULER__ENABLED` | `false` | 严格布尔；启用及启动须已有持续采集授权 |
+| `scheduler.timezone` | `FTR_SCHEDULER__TIMEZONE` | `Asia/Shanghai` | 可用 IANA 时区，由 tzdata 支持跨系统 |
+| `scheduler.times` | `FTR_SCHEDULER__TIMES` | `['09:00', '18:00']` | 非空、不重复的 HH:MM 字符串列表，排序后执行 |
+| `scheduler.lookback_days` | `FTR_SCHEDULER__LOOKBACK_DAYS` | `30` | 整数 1–366，含计划日期；落实为明确 TaskRequest 起止日 |
+| `scheduler.batch_interval_seconds` | `FTR_SCHEDULER__BATCH_INTERVAL_SECONDS` | `60` | 有限正数，同来源普通批次间隔 |
+| `scheduler.retry_delays_seconds` | `FTR_SCHEDULER__RETRY_DELAYS_SECONDS` | `[300, 900, 3600]` | 最多三项严格正整数；空列表不追加跨批重试 |
+
+列表环境变量使用 YAML 列表文本，如 `FTR_SCHEDULER__TIMES="['09:00', '18:00']"`。参数在进程启动时冻结；配置变更须重启，关闭后不创建/续跑任务。来源身份与日期字段含义仍不可配置更换。停机和积压补漏可能使某任务范围超过 30 天，但始终保存具体范围与原因；普通批次预算保持有界。时区遇到不存在的夏令时本地时点跳过，重复本地时点只执行一次。使用与部署见[定时获取](scheduled-acquisition.md)。
+
+## 本机持久计划
+
+本机管理保存后，managed_plan 成为同一数据目录的有效定时配置，YAML scheduler 只作为首次导入与缺省。CLI/网页/后台统一读取，CLI status 显示 persistent_local_plan 来源和保存/应用版本。完整网络/浏览器/预算配置经启动器私有环境传给后台；凭据不出现在子进程参数或 API。详见 local-management.md。
+
+## 更新检测参数
+
+| RuntimeSettings 字段 | 默认值 | 约束 |
+|---|---|---|
+| update_check.enabled | true | 布尔值；false 关闭联网检测 |
+| update_check.cache_seconds | 86400 | 正整数秒 |
+| update_check.failure_retry_seconds | 3600 | 正整数秒；服务端限流可能更长 |
+| update_check.timeout_seconds | 3 | 大于 0、至多 30 的有限秒数 |
+
+环境变量按 FTR_UPDATE_CHECK__字段名大写 映射，YAML/env/default 与现有规则一致。官方仓库与 main 不是可修改运行参数；结果及缓存路径见[更新检测](update-check.md)。

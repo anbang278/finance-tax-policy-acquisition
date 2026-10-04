@@ -90,6 +90,7 @@ class Collector:
         proxy: object = _PROXY_UNSET,
         rule_overrides: dict[str, Rules] | None = None,
         detail_limit: int | None = None,
+        stop_event: threading.Event | None = None,
     ):
         self.settings = settings or RuntimeSettings(data_dir=data_dir)
         selected = resolve_proxy(self.settings.network) if proxy is _PROXY_UNSET else proxy
@@ -107,6 +108,7 @@ class Collector:
         self.processed_documents = 0
         self.incomplete_documents = 0
         self.detail_limit = detail_limit
+        self.stop_event = stop_event
         self.detail_attempts = 0
         self._transient_streak: dict[str, int] = {}
         self._interrupted = False
@@ -161,6 +163,8 @@ class Collector:
 
     def _interrupt(self, signum, frame):
         self._interrupted = True
+        if self.stop_event is not None:
+            self.stop_event.set()
 
     def _report_progress(self, finished):
         while not finished.wait(self.settings.collection.progress_interval_seconds):
@@ -189,6 +193,8 @@ class Collector:
 
     def _checkpoint(self, task_id, source_id, started):
         row = self.repo.task(task_id)
+        if self.stop_event is not None and self.stop_event.is_set():
+            self._interrupted = True
         if self._interrupted:
             raise BudgetReached("收到中断信号，检查点已保留", "INTERRUPTED")
         if row["cancel_requested"]:
@@ -718,6 +724,129 @@ class Collector:
                 )
             )
         return record_id, created
+
+    def recover_record(self, record_id: str) -> dict:
+        """Recover only registered missing content; never enumerate or expand the task."""
+        original = self.repo.get_document(record_id)
+        row = self.repo.db.execute("SELECT * FROM documents WHERE id=?", (record_id,)).fetchone()
+        task_id = row["task_id"]
+        task = self.repo.task(task_id)
+        if task["cancel_requested"] or task["pause_requested"] or task["state"] == "CANCELLED":
+            raise ValueError("原任务人工暂停或取消，不自动补取")
+        source_id, config = original.source_id, self.sources[original.source_id]
+        self._active_task = task_id
+        self._request_stage = "attachment"
+        started = time.monotonic()
+        record = original.model_copy(
+            deep=True, update={"record_id": new_id(), "quality_state": "collected"}
+        )
+        warnings: list[str] = []
+        used_bytes = 0
+        with ExitStack() as stack:
+            client = (
+                BrowserSessionClient(
+                    config.allowed_hosts, settings=self.settings.network, proxy=self.proxy
+                )
+                if source_id == "chinatax"
+                else BoundedClient(
+                    config.allowed_hosts, settings=self.settings.network, proxy=self.proxy
+                )
+            )
+            stack.callback(client.close)
+            client.checkpoint = lambda: self._checkpoint(task_id, source_id, started)
+            client.before_request = lambda url: self._network_request(
+                task_id, source_id, started, url
+            )
+            if source_id == "chinatax":
+                playwright = stack.enter_context(sync_playwright())
+                browser, _ = launch_browser(
+                    playwright,
+                    self.settings.browser,
+                    proxy=browser_proxy(self.proxy),
+                    args=["--no-proxy-server"] if self.proxy is None else [],
+                )
+                stack.callback(browser.close)
+                page = browser.new_page()
+                stack.callback(page.close)
+                assert isinstance(client, BrowserSessionClient)
+                adapter = ChinataxAdapter(
+                    config, page, client, timeout_seconds=self.settings.browser.timeout_seconds
+                )
+                adapter.ensure_session()
+            if not original.body_text.strip():
+                ref_row = self.repo.db.execute(
+                    "SELECT ref_json FROM discovered WHERE task_id=? AND source_id=? AND url=?",
+                    (task_id, source_id, original.source_url),
+                ).fetchone()
+                if not ref_row:
+                    raise ValueError("原任务没有已登记的详情引用，禁止扩大补取范围")
+                ref = DiscoveredRef.model_validate_json(ref_row[0])
+                check_url(ref.url, config.allowed_hosts, self.proxy)
+                raw, final_url, media_type = client.get(ref.url)
+                check_url(final_url, config.allowed_hosts, self.proxy)
+                used_bytes = len(raw)
+                if used_bytes > self.settings.collection.max_bytes_per_source:
+                    raise BudgetReached("正文超过本批补取字节预算")
+                evidence = self.evidence.save(raw, ref.url, final_url, media_type)
+                self.repo.save_evidence(evidence)
+                parsed = parse_detail(ref, raw, evidence.evidence_id, self.rules[source_id])
+                if not parsed.body_text.strip():
+                    raise ValueError("正文仍无法可靠定位；需人工处理结构或内容限制")
+                # Preserve original attachment registry: this operation cannot add new URLs.
+                record.body_text, record.body_sha256 = parsed.body_text, parsed.body_sha256
+                record.evidence_id = evidence.evidence_id
+                record.limitations = [x for x in record.limitations if x != "正文区域未可靠定位"]
+            record.limitations = [x for x in record.limitations if x != "部分附件未保存"]
+            used_bytes += self._attachments(
+                record,
+                config,
+                client,
+                warnings,
+                self.settings.collection.max_bytes_per_source - used_bytes,
+                started,
+            )
+            record.limitations = list(dict.fromkeys(record.limitations))
+            incomplete = any(a.download_state != "saved" for a in record.attachments)
+            interrupted = (
+                isinstance(self._attachment_stop, BudgetReached)
+                and self._attachment_stop.code == "INTERRUPTED"
+            )
+            budget = (
+                isinstance(self._attachment_stop, BudgetReached)
+                and self._attachment_stop.code == "BUDGET_REACHED"
+            )
+            if used_bytes == 0:
+                if interrupted:
+                    return {
+                        "record_id": record_id,
+                        "created": False,
+                        "needs_review": True,
+                        "recovery_complete": False,
+                        "warnings": warnings,
+                    }
+                raise ValueError("补取无进展；检查来源、单文件预算或未支持解析后重试")
+            if incomplete and not (budget or interrupted):
+                # Preserve newly recovered originals even if another original is restricted.
+                record.limitations = list(dict.fromkeys(record.limitations))
+            if self.repo._material_digest(record) == self.repo._material_digest(original):
+                raise ValueError("没有可补取的变化；未支持的 Office/OCR 解析需进一步核查")
+            new_record_id, created = self._save_record(
+                task_id,
+                record,
+                base_record_id=record_id if record.evidence_id == original.evidence_id else None,
+            )
+            self.repo.db.execute(
+                "UPDATE source_runs SET bytes_count=bytes_count+? WHERE task_id=? AND source_id=?",
+                (used_bytes, task_id, source_id),
+            )
+            return {
+                "record_id": new_record_id,
+                "created": created,
+                "needs_review": True,
+                "recovery_complete": not incomplete,
+                "blocked": incomplete and not (budget or interrupted),
+                "warnings": warnings,
+            }
 
     def _recover_attachments(self, task_id, request, source_id, config, client, started, warnings):
         for original in self.repo.pending_attachment_records(task_id, source_id):

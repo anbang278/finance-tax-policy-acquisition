@@ -39,10 +39,13 @@ def parser() -> argparse.ArgumentParser:
     serve.add_argument("--host")
     serve.add_argument("--port", type=int)
     workbench = commands.add_parser("workbench").add_subparsers(dest="action", required=True)
-    for action in ("start", "status", "stop"):
+    for action in ("start", "status", "stop", "background-status", "background-stop"):
         command = workbench.add_parser(action)
         if action == "start":
             command.add_argument("--open", action="store_true")
+            command.add_argument(
+                "--manage", action="store_true", help="本人回环管理：定时计划与逐条复核"
+            )
     collect = commands.add_parser("collect")
     collect.add_argument("--request", type=Path)
     collect.add_argument("--sources", nargs="+", choices=["mof", "chinatax"])
@@ -108,7 +111,22 @@ def parser() -> argparse.ArgumentParser:
     release.add_parser("status").add_argument(
         "--adapter", choices=["mof", "chinatax"], required=True
     )
+    update = commands.add_parser("update", help="官方 main 更新检测（仅提醒）").add_subparsers(
+        dest="action", required=True
+    )
+    update.add_parser("check", help="检查更新，默认使用缓存").add_argument(
+        "--force", action="store_true", help="绕过缓存重新检查 GitHub"
+    )
     commands.add_parser("schema")
+    scheduler = commands.add_parser(
+        "scheduler", help="持续回看、定时采集与自动补漏（默认关闭）"
+    ).add_subparsers(dest="action", required=True)
+    scheduler.add_parser("run", help="前台运行；启用配置后由 systemd 托管")
+    scheduler.add_parser("status", help="只读查看计划、心跳、积压与来源异常")
+    scheduler.add_parser("preview", help="只读预览执行时点与冻结日期窗口")
+    scheduler.add_parser("resume", help="处理故障后恢复来源，不清除人工任务标记").add_argument(
+        "--source", choices=["mof", "chinatax"], required=True
+    )
     return root
 
 
@@ -131,6 +149,47 @@ def run(args: argparse.Namespace) -> OperationResponse:
     settings = load_settings(getattr(args, "config", None), overrides=overrides)
     root = settings.data_dir
     effective_proxy = resolve_proxy(settings.network)
+    from ftr.update_check import check_for_updates, emit_notice
+
+    if args.command == "update":
+        checked = check_for_updates(settings, force=args.force)
+        emit_notice(checked)
+        return OperationResponse(operation="update check", status="COMPLETED", data=checked)
+    if (
+        args.command in ("collect", "serve")
+        or (args.command == "task" and args.action == "resume")
+        or (args.command == "workbench" and args.action == "start")
+    ):
+        emit_notice(check_for_updates(settings))
+    if args.command == "scheduler":
+        from ftr.config import SchedulerSettings
+        from ftr.management import effective_plan
+        from ftr.scheduler import preview, resume_source, run_scheduler, status
+
+        settings = settings.model_copy(
+            update={
+                "scheduler": SchedulerSettings.model_validate(
+                    effective_plan(root, settings.scheduler)["settings"]
+                )
+            }
+        )
+
+        if args.action == "run" and settings.scheduler.enabled:
+            emit_notice(check_for_updates(settings))
+        result = (
+            preview(settings.scheduler)
+            if args.action == "preview"
+            else status(root, settings.scheduler)
+            if args.action == "status"
+            else resume_source(root, args.source)
+            if args.action == "resume"
+            else run_scheduler(settings)
+        )
+        return OperationResponse(
+            operation=f"scheduler {args.action}",
+            status=result.get("state", "COMPLETED"),
+            data=result,
+        )
     if args.command == "config":
         return OperationResponse(
             operation=f"config {args.action}",
@@ -154,7 +213,13 @@ def run(args: argparse.Namespace) -> OperationResponse:
         from ftr.workbench import manage
 
         result = manage(
-            root, args.action, open_browser=getattr(args, "open", False), web_settings=settings.web
+            root,
+            args.action,
+            open_browser=getattr(args, "open", False),
+            web_settings=settings.web,
+            scheduler_settings=settings.scheduler,
+            management=getattr(args, "manage", False),
+            runtime_settings=settings,
         )
         return OperationResponse(
             operation=f"workbench {args.action}", status=result["state"], data=result
@@ -164,7 +229,7 @@ def run(args: argparse.Namespace) -> OperationResponse:
             from ftr.web.app import serve
         except ImportError as exc:
             raise RuntimeError("请先安装 Web 依赖：uv sync --extra web") from exc
-        serve(root, settings.web.port, settings.web)
+        serve(root, settings.web.port, settings.web, settings.scheduler, runtime_settings=settings)
         return OperationResponse(operation="serve", status="STOPPED")
     if (
         args.command == "collect"

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import os
+import re
 from importlib.resources import files
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlsplit, urlunsplit
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml  # type: ignore[import-untyped]
 from pydantic import (
@@ -13,6 +15,7 @@ from pydantic import (
     Field,
     PrivateAttr,
     StrictBool,
+    StrictInt,
     ValidationError,
     model_validator,
 )
@@ -107,12 +110,47 @@ class WebSettings(SettingsModel):
         return self
 
 
+class SchedulerSettings(SettingsModel):
+    enabled: StrictBool = False
+    timezone: str = "Asia/Shanghai"
+    times: list[str] = Field(default_factory=lambda: ["09:00", "18:00"], min_length=1)
+    lookback_days: int = Field(default=30, ge=1, le=366, strict=True)
+    batch_interval_seconds: float = Field(default=60, gt=0, allow_inf_nan=False, strict=True)
+    retry_delays_seconds: list[StrictInt] = Field(default_factory=lambda: [300, 900, 3600])
+
+    @model_validator(mode="after")
+    def schedule_values(self) -> SchedulerSettings:
+        try:
+            ZoneInfo(self.timezone)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError("timezone 须为可用的 IANA 时区") from exc
+        if len(set(self.times)) != len(self.times) or any(
+            not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value) for value in self.times
+        ):
+            raise ValueError("times 须为不重复的 HH:MM 时间")
+        if len(self.retry_delays_seconds) > 3 or any(
+            isinstance(value, bool) or value <= 0 for value in self.retry_delays_seconds
+        ):
+            raise ValueError("retry_delays_seconds 须为最多三个正整数秒数")
+        self.times = sorted(self.times)
+        return self
+
+
+class UpdateCheckSettings(SettingsModel):
+    enabled: StrictBool = True
+    cache_seconds: int = Field(default=86400, ge=1, strict=True)
+    failure_retry_seconds: int = Field(default=3600, ge=1, strict=True)
+    timeout_seconds: float = Field(default=3, gt=0, le=30, allow_inf_nan=False, strict=True)
+
+
 class RuntimeSettings(SettingsModel):
     data_dir: Path = Field(default_factory=lambda: Path.home() / ".local" / "share" / "ftr")
     network: NetworkSettings = Field(default_factory=NetworkSettings)
     browser: BrowserSettings = Field(default_factory=BrowserSettings)
     collection: CollectionSettings = Field(default_factory=CollectionSettings)
     web: WebSettings = Field(default_factory=WebSettings)
+    scheduler: SchedulerSettings = Field(default_factory=SchedulerSettings)
+    update_check: UpdateCheckSettings = Field(default_factory=UpdateCheckSettings)
     _origins: dict[str, str] = PrivateAttr(default_factory=dict)
     _config_path: Path | None = PrivateAttr(default=None)
 

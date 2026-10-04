@@ -1,6 +1,6 @@
 {
   "name": "finance-tax-research",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "公开财税资料采集、证据管理与本地研究演示",
   "author": {"name": "Anbang"},
   "skills": "./skills/",

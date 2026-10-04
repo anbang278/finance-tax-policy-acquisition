@@ -1,3 +1,4 @@
+import {bootstrapManagement, refreshManagement, selectReview} from './manage.js';
 const reasonLabels = {missing_filter_date: '筛选日期缺失', missing_content: '标题或正文缺失', unreliable_body: '正文定位待确认', unknown_document_type: '资料类型待确认', attachment_not_saved: '附件未保存', primary_attachment_unparsed: '主附件未解析', primary_content_unparsed: '主内容未解析', pdf_extraction_warning: 'PDF 完整性待复核', other_historical: '其他／历史原因'};
 const stopLabels = {BUDGET_REACHED: '达到本批预算', INTERRUPTED: '收到中断信号', INTERRUPTED_PREVIOUS_WRITER: '前次运行异常结束', PAUSE_REQUESTED: '收到暂停请求', CANCEL_REQUESTED: '收到取消请求', TRANSIENT_FAILURE_LIMIT: '连续网络失败达到上限', SOURCE_FAILURE: '来源失败待诊断', TRANSIENT_NETWORK: '来源网络失败', INCOMPLETE_QUEUE: '队列尚未完成'};
 let uiConfig = {poll_interval_ms: 5000, request_timeout_ms: 10000};
@@ -15,6 +16,8 @@ const names = {
 };
 const paths = {
   library: '<path d="M4 4h4v16H4zM10 4h4v16h-4zM16 5l4-1 3 15-4 1z"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  review: '<path d="M7 4h10v16H5V4h2M9 2h6v4H9zM8 13l2 2 5-5"/>',
   activity: '<path d="M3 12h4l3-7 4 14 3-7h4"/>',
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c-5 5-5 13 0 18M12 3c5 5 5 13 0 18"/>',
   arrow: '<path d="M5 12h14m-5-5 5 5-5 5"/>',
@@ -97,6 +100,26 @@ function renderOverview(data) {
   updateNode($('#overview'), values.map(([count, text, style]) => `<div class="stat ${style}"><strong>${count}</strong><span>${text}</span></div>`).join('') + reasonCounts);
 }
 
+function renderScheduler(data) {
+  const configured = data.configured_settings;
+  const effective = data.settings;
+  const dateTime = (value) => value ? new Date(value).toLocaleString('zh-CN', {timeZone: effective.timezone}) : '—';
+  const running = data.heartbeat_fresh ? '心跳正常' : '未运行或心跳过期';
+  const taskLink = (id) => id ? `<a href="#tasks/${encodeURIComponent(id)}">查看关联任务</a>` : '';
+  const sources = data.sources.map((source) => {
+    const report = source.report;
+    const request = report?.request;
+    const completion = report?.completion;
+    const completed = completion?.coverage === 'COMPLETE' && completion?.downloads === 'COMPLETE';
+    const reasons = {MANUAL_PAUSE: '人工暂停', MANUAL_CANCEL: '人工取消', ACCESS_RESTRICTED: '官网访问受限', STRUCTURE_DRIFT: '页面结构变化', BROWSER_ERROR: '浏览器或显示环境故障', UNKNOWN: '原因待确认', EXECUTION_ERROR: '运行异常', RETRIES_EXHAUSTED: '网络重试已耗尽', NO_PROGRESS: '连续三批无进展'};
+    const text = source.paused_reason ? `待处理：${reasons[source.paused_reason] || '原因待确认'}` : source.active_task_id ? '正在获取或等待续跑' : completed ? '采集完成' : '等待计划';
+    const review = completion?.review === 'PENDING_OR_LIMITED' ? ' · 待复核或存在内容限制' : '';
+    const pending = source.pending_window;
+    return `<article class="scheduler-source"><strong>${esc(label(names.source, source.source_id))}</strong><p>${esc(text)}${esc(review)}</p>${request ? `<p>任务范围 ${esc(request.date_from)} — ${esc(request.date_to)} · ${source.source_id === 'mof' ? '栏目日期' : '成文日期'}</p>` : ''}${pending ? `<p>待补漏 ${esc(pending.date_from)} — ${esc(pending.date_to)}</p>` : ''}<p>已追加重试 ${source.retry_count} 次 · 下次尝试 ${esc(dateTime(source.next_attempt_at))}</p>${report ? `<p>已检查 ${report.sources[0]?.pages_scanned || 0} 页 · ${completion.coverage === 'COMPLETE' ? '范围核查完成' : '未读匹配数量未知'} · 缺失 ${report.missing_items.length} 项</p>` : ''}<p>${esc(source.next_step)}</p>${taskLink(source.active_task_id || source.last_task_id)}</article>`;
+  }).join('');
+  updateNode($('#scheduler-status'), `<div class="scheduler-heading"><strong>定时获取 · ${configured.enabled ? '配置已启用' : '配置关闭'}</strong><span>${esc(running)}</span></div><p>${esc(effective.timezone)} · 每天 ${esc(effective.times.join('、'))} · 每次回看 ${effective.lookback_days} 天 · 下次计划 ${esc(dateTime(data.next_run_at))}</p>${data.heartbeat?.activity?.state === 'DATA_LOCKED' ? '<p>资料目录正由其他写入任务使用，定时服务将在 60 秒后重试。</p>' : ''}${!data.config_matches ? '<p class="scheduler-warning">当前工作台配置与最近调度配置不同，请核对配置文件并重启相关服务。</p>' : ''}${!data.heartbeat_fresh && data.next_run_at ? '<p>下次计划仅为计算时点；需要启动定时服务才会执行。</p>' : ''}<div class="scheduler-sources">${sources || '<p>尚未启动定时服务。通过配置文件启用并运行 scheduler run。</p>'}</div>`);
+}
+
 function renderPolicies(data) {
   $('#policy-total').textContent = `${data.total} 份${data.date_unknown_count ? ` · 日期未知 ${data.date_unknown_count} 份（范围归属待确认）` : ''}`;
   let unknownGroup = false;
@@ -126,7 +149,7 @@ function renderBody(d) {
 }
 
 function renderPolicy(d, versions) {
-  const header = `<div class="detail-header"><button class="mobile-back" data-back>${icon('back')}返回政策列表</button><div class="detail-eyebrow"><span>${esc(label(names.type, d.document_type))}</span>${badge('quality', d.quality_state)}<span>来源 v${d.source_version} · 提取 v${d.extraction_version}</span></div><h2>${esc(d.title || '标题缺失')}</h2><div class="doc-meta"><span>来源 <b>${esc(label(names.source, d.source_id))}</b></span><span>文号 <b>${esc(d.document_number || '未提取')}</b></span><span>${esc(dateName(d.listing_date_kind))} <b>${esc(d.listing_date || '缺失')}</b></span><span>成文日期 <b>${esc(d.issued_date || '未提取')}</b></span><span>发布日期 <b>${esc(d.published_date || '未提取')}</b></span></div><div class="origin-row"><div>官方原文${external(d.source_url, d.source_url || '')}</div><button class="button" data-task="${esc(d.task_id)}">${icon('activity')}关联任务</button></div>${d.limitations.length ? `<div class="limitation">${(d.limitation_reasons || d.limitations.map((item) => ({label: item, original: item}))).map((item) => `<p>${esc(item.label)}${item.original !== item.label ? `：${esc(item.original)}` : ''}</p>`).join('')}</div>` : ''}</div>`;
+  const header = `<div class="detail-header"><button class="mobile-back" data-back>${icon('back')}返回政策列表</button><div class="detail-eyebrow"><span>${esc(label(names.type, d.document_type))}</span>${badge('quality', d.quality_state)}<span>来源 v${d.source_version} · 提取 v${d.extraction_version}</span></div><h2>${esc(d.title || '标题缺失')}</h2><div class="doc-meta"><span>来源 <b>${esc(label(names.source, d.source_id))}</b></span><span>文号 <b>${esc(d.document_number || '未提取')}</b></span><span>${esc(dateName(d.listing_date_kind))} <b>${esc(d.listing_date || '缺失')}</b></span><span>成文日期 <b>${esc(d.issued_date || '未提取')}</b></span><span>发布日期 <b>${esc(d.published_date || '未提取')}</b></span></div><div class="origin-row"><div>官方原文${external(d.source_url, d.source_url || '')}</div><button class="button" data-task="${esc(d.task_id)}">${icon('activity')}关联任务</button><a class="button" href="#reviews/${esc(d.record_id)}">资料复核</a></div>${d.limitations.length ? `<div class="limitation">${(d.limitation_reasons || d.limitations.map((item) => ({label: item, original: item}))).map((item) => `<p>${esc(item.label)}${item.original !== item.label ? `：${esc(item.original)}` : ''}</p>`).join('')}</div>` : ''}</div>`;
   const tabs = [['body', '正文'], ['attachments', `附件 ${d.attachments.length}`], ['versions', `版本 ${versions.length}`], ['evidence', '证据']];
   let content = '';
   if (state.policyTab === 'body') {
@@ -212,7 +235,9 @@ async function refresh() {
     const sources = state.sources.length ? null : await api('/api/sources');
     if (revision !== state.revision) return;
     if (sources) state.sources = sources.items;
-    if (state.view === 'policies') {
+    if (['scheduler','reviews'].includes(state.view)) {
+      await refreshManagement(state.view);
+    } else if (state.view === 'policies') {
       const params = Object.fromEntries(new FormData($('#policy-filters')));
       const data = await api('/api/policies', {...params, page: state.policyPage});
       if (revision !== state.revision) return;
@@ -225,6 +250,9 @@ async function refresh() {
       renderPolicies(data);
       if (state.policy) renderPolicy(state.policy, state.versions);
     } else {
+      const scheduler = await api('/api/scheduler');
+      if (revision !== state.revision) return;
+      renderScheduler(scheduler);
       const data = await api('/api/tasks', {state: $('#task-state').value, page: state.taskPage});
       if (revision !== state.revision) return;
       let id = state.taskId;
@@ -257,7 +285,7 @@ async function refresh() {
 function changed() {state.revision++; refresh();}
 function route() {
   const [view, encodedId] = location.hash.slice(1).split('/');
-  const nextView = view === 'tasks' ? 'tasks' : 'policies';
+  const nextView = ['tasks','scheduler','reviews'].includes(view) ? view : 'policies';
   let id = null;
   try {id = encodedId ? decodeURIComponent(encodedId) : null;} catch {id = null;}
   state.mobileDetail = Boolean(id);
@@ -269,12 +297,16 @@ function route() {
     if (id !== state.taskId) {state.taskTab = 'queue'; state.queuePage = 1; state.eventPage = 1; state.queueState = ''; state.queueSource = ''; state.queueQuery = ''; $('#task-detail').scrollTop = 0;}
     state.taskId = id;
   }
+  if (nextView === 'reviews') selectReview(id);
   state.view = nextView;
+  $('#scheduler-view').hidden = nextView !== 'scheduler';
+  $('#reviews-view').hidden = nextView !== 'reviews';
+  $('#management-operations').hidden = !['scheduler','reviews'].includes(nextView);
   $('#policies-view').hidden = nextView !== 'policies';
   $('#tasks-view').hidden = nextView !== 'tasks';
-  $('#view-name').textContent = $('#page-title').textContent = nextView === 'policies' ? '政策库' : '采集监控';
-  $('#eyebrow').textContent = nextView === 'policies' ? 'POLICY LIBRARY' : 'COLLECTION MONITOR';
-  $('#page-description').textContent = nextView === 'policies' ? '找到资料，读到原文，保留每一份证据。' : '看清来源进度、发现队列与每一次失败。';
+  $('#view-name').textContent = $('#page-title').textContent = ({policies:'政策库',tasks:'采集监控',scheduler:'定时任务',reviews:'资料复核'})[nextView];
+  $('#eyebrow').textContent = ({policies:'POLICY LIBRARY',tasks:'COLLECTION MONITOR',scheduler:'SCHEDULE & RECOVERY',reviews:'MATERIAL REVIEW'})[nextView];
+  $('#page-description').textContent = ({policies:'找到资料，读到原文，保留每一份证据。',tasks:'看清来源进度、发现队列与每一次失败。',scheduler:'调整计划，观察实际执行与补漏积压。',reviews:'逐条核对证据，保存草稿并保留每轮结论。'})[nextView];
   document.querySelectorAll('[data-view]').forEach((node) => node.classList.toggle('active', node.dataset.view === nextView));
   applyMobile();
   changed();
@@ -304,7 +336,7 @@ $('#policy-filters').addEventListener('change', () => {state.policyPage = 1; cha
 $('#policy-search').addEventListener('input', () => {clearTimeout(policyDebounce); policyDebounce = setTimeout(() => {state.policyPage = 1; changed();}, 300);});
 $('#policy-filters').addEventListener('reset', () => {setTimeout(() => {state.policyPage = 1; changed();}, 0);});
 $('#task-state').addEventListener('change', () => {state.taskPage = 1; changed();});
-$('#refresh').addEventListener('click', changed);
+$('#refresh').addEventListener('click', () => {changed(); refreshUpdateStatus();});
 $('#sources-open').addEventListener('click', () => showSources());
 $('#sources-close').addEventListener('click', () => $('#sources-dialog').close());
 document.addEventListener('click', async (event) => {
@@ -344,16 +376,41 @@ document.addEventListener('input', (event) => {
   }
 });
 window.addEventListener('hashchange', route);
-document.addEventListener('visibilitychange', () => {if (!document.hidden) refresh();});
+document.addEventListener('visibilitychange', () => {if (!document.hidden) {refresh(); refreshUpdateStatus();}});
 
 document.querySelectorAll('[data-icon]').forEach((node) => {node.innerHTML = icon(node.dataset.icon);});
 $('#policy-type').innerHTML = options(names.type, '全部资料类型');
 $('#policy-quality').innerHTML = options(names.quality, '全部质量状态');
 $('#task-state').innerHTML = options(names.task, '全部任务状态');
+async function refreshUpdateStatus() {
+  try {
+    const data = await api('/api/update-status');
+    const labels = {UP_TO_DATE: '基准提交与 main 一致', UPDATE_AVAILABLE: '有新版本', LOCAL_AHEAD: '本地领先', DIVERGED: '已分叉', UNKNOWN: '无法确认是否最新', CHECK_FAILED: '检查未完成', DISABLED: '更新检查已关闭'};
+    const local = data.local || {};
+    const version = `版本 ${local.version || '未知'}${local.commit ? ' · ' + local.commit.slice(0, 7) : ''}`;
+    $('#update-version').textContent = `${version} · ${labels[data.state] || '检查中'}`;
+    $('#update-version').title = labels[data.state] || '检查中';
+    const warnings = [];
+    if (data.restart_required) warnings.push('磁盘代码已变化，请重启工作台以加载新版本。');
+    if (data.state === 'UPDATE_AVAILABLE') warnings.push('检测到官方 main 有新版本，建议任务结束后更新。本次可继续使用。');
+    if (data.state === 'DIVERGED') warnings.push('本地与官方 main 已分叉，更新前需人工核对。');
+    if (['UNKNOWN', 'CHECK_FAILED'].includes(data.state)) warnings.push(labels[data.state] + '。');
+    if (local.dirty) warnings.push('本地有修改，更新前须保留。');
+    const timestamp = data.checked_at ? ` 最近检查：${new Date(data.checked_at * 1000).toLocaleString('zh-CN')}。` : '';
+    const stale = data.stale && data.last_success ? ' 上次成功结果已过期。' : '';
+    const node = $('#update-notice');
+    node.hidden = warnings.length === 0;
+    updateNode(node, esc(warnings.join(' ') + timestamp + stale) + (data.state === 'UPDATE_AVAILABLE' ? ' <a href="https://github.com/anbang278/finance-tax-policy-acquisition" target="_blank" rel="noopener noreferrer">查看官方项目</a>' : ''));
+  } catch { $('#update-version').textContent = '版本状态暂不可用'; }
+}
+
 async function start() {
   try {
     uiConfig = await api('/api/ui-config');
+    await bootstrapManagement();
     route();
+    refreshUpdateStatus();
+    setInterval(() => {if (!document.hidden) refreshUpdateStatus();}, 60000);
     setInterval(() => {if (!document.hidden) refresh();}, uiConfig.poll_interval_ms);
   } catch (error) {
     failed(error);

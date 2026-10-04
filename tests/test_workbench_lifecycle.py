@@ -3,6 +3,7 @@ import socket
 
 import pytest
 
+from ftr.config import WebSettings
 from ftr.repository import Repository
 from ftr.workbench import manage
 
@@ -20,12 +21,15 @@ def test_real_start_reuse_conflict_stop_readonly(tmp_path, monkeypatch):
     before = (tmp_path / "database.sqlite3").read_bytes()
     monkeypatch.setattr("ftr.workbench.webbrowser.open", lambda _: False)
     with socket.socket() as occupied:
-        occupied.bind(("127.0.0.1", 8765))
+        occupied.bind(("127.0.0.1", 0))
+        port = occupied.getsockname()[1]
         occupied.listen()
         try:
-            first = manage(tmp_path, "start", open_browser=True)
+            first = manage(
+                tmp_path, "start", open_browser=True, web_settings=WebSettings(port=port)
+            )
             assert first["state"] == "RUNNING"
-            assert first["url"] != "http://127.0.0.1:8765"
+            assert first["url"] != f"http://127.0.0.1:{port}"
             assert first["browser_opened"] is False
             again = manage(tmp_path, "start")
             assert again["pid"] == first["pid"]
