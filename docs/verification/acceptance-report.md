@@ -256,3 +256,12 @@ PASS（本机）：只读扫描全部 60 条记录（本次无额外历史版本
 第三轮 CI https://github.com/anbang278/finance-tax-policy-acquisition/actions/runs/37165891147 的 Ubuntu PASS；macOS 暴露两个测试本身的调度假设：进度线程未必在固定 40ms 内执行，完整检测（含缓存 I/O）未必在 150ms 内返回。测试改用进度实际输出事件和未释放网络阻塞事件；仍验证周期输出仅进入 stderr、检测 TIMEOUT 返回且早于网络完成，并保持安全宽裕的失败上限，不修改业务超时。针对性 2 passed；完整最终结果以随后记录及新 Actions 为准。
 
 线程事件验证调整后本机完整 Chromium 回归 299 passed / 1 skipped（50.28 秒），ruff、修改测试文件格式及 diff 检查 PASS；没有放宽功能断言或改变产品超时配置。
+
+
+## 0.1.1 发布验收结论（2026-10-04）
+
+状态：PASS（本机工程检查及三平台 CI）；Windows/Linux 用户真机与 Codex/Hermes 自然语言宿主会话仍待验收，不作为本次 PASS 的范围。
+
+最终功能/测试提交 bb43c6c03a1c2a9d467118b7b53a469e7eae0b82 的[三平台 CI](https://github.com/anbang278/finance-tax-policy-acquisition/actions/runs/37166131508) 已 completed/success，Ubuntu 24.04、Windows latest、macOS latest 均 success，覆盖实际 Chromium、测试、ruff、mypy、构建及源码外独立安装；Windows 同时执行 PowerShell 入口语法验证。此前失败记录保留，不冒充首轮通过。本机最终回归为 299 passed / 1 skipped（50.28 秒），本机 Windows 专属跳过已由 Windows CI 补充执行。
+
+本次同步五处版本为 0.1.1，发布更新检测、定时获取和本机管理工作台。官方 main 的提交与包版本已实际回读；匿名实际检查已验证新提交 UP_TO_DATE、旧 0.1.0 提交 UPDATE_AVAILABLE。定时配置默认关闭，未真实采集、执行资料复核、安装宿主或部署。末尾收尾提交仅修改 CHANGELOG 与本验收文档，以 [skip ci] 避免重复执行未变的工程代码；其工程证据对应上述 bb43c6c。发布制品在收尾提交后从干净工作区重新构建，以该 HEAD 写入身份。
