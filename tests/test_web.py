@@ -459,7 +459,6 @@ def test_browser_reading_monitor_refresh_and_recovery(web_data):
             expect(page.locator("#error-banner")).to_be_hidden()
             page.wait_for_load_state("networkidle")
             requests = []
-            page.on("request", lambda request: requests.append(request.url))
             page.evaluate("""() => {
                 window.testHidden = true;
                 Object.defineProperty(document, 'hidden', {
@@ -467,6 +466,9 @@ def test_browser_reading_monitor_refresh_and_recovery(web_data):
                 });
                 document.dispatchEvent(new Event('visibilitychange'));
             }""")
+            # Observe after hiding; requests already sent while visible may still finish.
+            page.wait_for_load_state("networkidle")
+            page.on("request", lambda request: requests.append(request.url))
             page.wait_for_timeout(5500)
             assert not any("/api/" in request for request in requests)
             page.evaluate("""() => {

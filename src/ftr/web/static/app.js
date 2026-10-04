@@ -70,6 +70,7 @@ function updateNode(node, html) {
 }
 
 async function api(path, params = {}) {
+  if (document.hidden) throw new DOMException("页面已隐藏", "AbortError");
   const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== '' && value != null));
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), uiConfig.request_timeout_ms);
@@ -227,6 +228,7 @@ function failed(error) {
 }
 
 async function refresh() {
+  if (document.hidden) return;
   if (state.busy) {state.pending = true; return;}
   state.busy = true;
   const revision = state.revision;
@@ -275,10 +277,10 @@ async function refresh() {
     }
     renderOverview(overview);
     connected(overview.queried_at);
-  } catch (error) {if (revision === state.revision) failed(error);}
+  } catch (error) {if (!document.hidden && revision === state.revision) failed(error);}
   finally {
     state.busy = false;
-    if (state.pending) {state.pending = false; refresh();}
+    if (state.pending) {state.pending = false; if (!document.hidden) refresh();}
   }
 }
 
@@ -376,13 +378,17 @@ document.addEventListener('input', (event) => {
   }
 });
 window.addEventListener('hashchange', route);
-document.addEventListener('visibilitychange', () => {if (!document.hidden) {refresh(); refreshUpdateStatus();}});
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {state.revision++; state.pending = false;}
+  else {refresh(); refreshUpdateStatus();}
+});
 
 document.querySelectorAll('[data-icon]').forEach((node) => {node.innerHTML = icon(node.dataset.icon);});
 $('#policy-type').innerHTML = options(names.type, '全部资料类型');
 $('#policy-quality').innerHTML = options(names.quality, '全部质量状态');
 $('#task-state').innerHTML = options(names.task, '全部任务状态');
 async function refreshUpdateStatus() {
+  if (document.hidden) return;
   try {
     const data = await api('/api/update-status');
     const labels = {UP_TO_DATE: '基准提交与 main 一致', UPDATE_AVAILABLE: '有新版本', LOCAL_AHEAD: '本地领先', DIVERGED: '已分叉', UNKNOWN: '无法确认是否最新', CHECK_FAILED: '检查未完成', DISABLED: '更新检查已关闭'};

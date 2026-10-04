@@ -246,3 +246,8 @@ PASS（本机）：只读扫描全部 60 条记录（本次无额外历史版本
 首轮远程 CI https://github.com/anbang278/finance-tax-policy-acquisition/actions/runs/37165377471 中 Ubuntu PASS，macOS 的四项管理后台测试失败（握手超时及后续未启动）；Windows 当时仍运行。共同路径使用 Python HTTPServer.server_bind 的 socket.getfqdn，会在数值回环绑定时执行反向 DNS，存在环境相关启动阻塞。改为直接 TCP 绑定固定 127.0.0.1，保留实例认证、独立锁与所有安全门禁；新增阻断 getfqdn/gethostbyaddr 的启动测试，不放宽等待时限。DNS 是本次排查假设，远程修复后的结果以新 CI 为准。
 
 修复后本机管理专项 29 passed（13.63 秒），完整实际 Chromium 回归 299 passed / 1 skipped（50.95 秒）；ruff 与 mypy PASS。新 CI 及 Windows/Linux 真机验收不以这些本机结果替代；未进行真实采集、部署或宿主安装。
+
+
+第二轮远程 CI https://github.com/anbang278/finance-tax-policy-acquisition/actions/runs/37165658400 的 macOS 全部 PASS，支持回环服务不再等待 DNS 的修复；Ubuntu 暴露既有页面隐藏轮询竞态（此前基准提交的远程 CI 也有同一断言失败）。刷新入口、连续查询及待处理刷新现均检查页面可见性，隐藏时使旧结果失效并停止后续请求，恢复可见立即刷新；浏览器测试在页面隐藏且旧请求结束后开始观察，排除把隐藏前请求误计为后台请求。更新检测与 Web Chromium 定向验证 65 passed（19.06 秒）。本轮最终三平台结果以新提交对应 Actions 为准。
+
+页面轮询修复后完整 Chromium 回归再次验证：299 passed / 1 skipped，49.10 秒；ruff、修改 Python 文件格式检查、git diff --check PASS。
