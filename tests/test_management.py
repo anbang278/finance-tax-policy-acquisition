@@ -1027,3 +1027,19 @@ def test_worker_tampered_port_never_contacts_remote(tmp_path, monkeypatch):
 
     monkeypatch.setattr("ftr.worker.httpx.Client", forbidden)
     assert identity(tmp_path) is None
+
+
+def test_loopback_worker_binding_never_resolves_dns(monkeypatch):
+    import socket
+    from http.server import BaseHTTPRequestHandler
+
+    from ftr.worker import LoopbackControlServer
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("loopback startup must not resolve DNS")
+
+    monkeypatch.setattr(socket, "getfqdn", forbidden)
+    monkeypatch.setattr(socket, "gethostbyaddr", forbidden)
+    with LoopbackControlServer(("127.0.0.1", 0), BaseHTTPRequestHandler) as server:
+        assert server.server_name == "127.0.0.1"
+        assert server.server_port > 0

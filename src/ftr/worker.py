@@ -7,6 +7,7 @@ import json
 import os
 import secrets
 import signal
+import socketserver
 import subprocess
 import sys
 import threading
@@ -22,6 +23,15 @@ from ftr.config import RuntimeSettings
 from ftr.management import effective_plan, operations, process_commands
 from ftr.rules import atomic_json
 from ftr.scheduler import Scheduler
+
+
+class LoopbackControlServer(ThreadingHTTPServer):
+    """Bind the fixed numeric loopback address without reverse DNS on startup."""
+
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name = "127.0.0.1"
+        self.server_port = self.server_address[1]
 
 
 def identity(root: Path) -> dict | None:
@@ -188,7 +198,7 @@ def run(settings: RuntimeSettings, token: str, instance: str):
     if (root / ".scheduler.lock").is_symlink():
         raise ValueError("调度锁路径无效")
     with portalocker.Lock(str(root / ".scheduler.lock"), timeout=0):
-        server = ThreadingHTTPServer(("127.0.0.1", 0), Control)
+        server = LoopbackControlServer(("127.0.0.1", 0), Control)
         threading.Thread(target=server.serve_forever, daemon=True).start()
         atomic_json(
             root / ".worker.json",

@@ -237,3 +237,12 @@ PASS（本机）：只读扫描全部 60 条记录（本次无额外历史版本
 回归修复了来源管理按钮与原来源弹窗事件冲突、嵌套只读事务快照等待、管理进程重启后待执行队列未自动唤醒、预算内补取部分成果的持续恢复；保持版本校验与复核门槛。正常预算续跑不作为失败，计划命令“已生效”只证明窗口/设置已应用，实际采集完成仍以来源及任务进度为准。
 
 使用入口见[本机定时任务与人工复核](../guides/local-management.md)。schema v4 不支持旧程序写入；回退应在新目录恢复升级前备份，保留原现场。此次仅测试临时库和受控政策来源，未对用户现有数据库或原件执行写入。
+
+
+## 0.1.1 发布联网证据与 CI 修复（2026-10-04）
+
+已将发布提交 e7ffc90b608f2e3b1527d0a848763d93009ed34f 推送至官方 main，并通过 GitHub API 回读包版本 0.1.1 与同一提交。真实匿名更新检测（临时缓存、无令牌）返回 UP_TO_DATE、dirty=false；使用升级前 18721b454b1b2817c204afa8d5455b82af0174a1 身份检查返回 UPDATE_AVAILABLE，依据 local_ancestry。提交后重建 sdist/wheel 身份一致，记录 e7ffc90、0.1.1、dirty=false；源码外独立 wheel 验证 PASS。此处是真实联网证据，与此前匿名限流失败记录分开。
+
+首轮远程 CI https://github.com/anbang278/finance-tax-policy-acquisition/actions/runs/37165377471 中 Ubuntu PASS，macOS 的四项管理后台测试失败（握手超时及后续未启动）；Windows 当时仍运行。共同路径使用 Python HTTPServer.server_bind 的 socket.getfqdn，会在数值回环绑定时执行反向 DNS，存在环境相关启动阻塞。改为直接 TCP 绑定固定 127.0.0.1，保留实例认证、独立锁与所有安全门禁；新增阻断 getfqdn/gethostbyaddr 的启动测试，不放宽等待时限。DNS 是本次排查假设，远程修复后的结果以新 CI 为准。
+
+修复后本机管理专项 29 passed（13.63 秒），完整实际 Chromium 回归 299 passed / 1 skipped（50.95 秒）；ruff 与 mypy PASS。新 CI 及 Windows/Linux 真机验收不以这些本机结果替代；未进行真实采集、部署或宿主安装。
