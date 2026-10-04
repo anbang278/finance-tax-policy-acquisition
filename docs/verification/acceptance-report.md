@@ -251,3 +251,8 @@ PASS（本机）：只读扫描全部 60 条记录（本次无额外历史版本
 第二轮远程 CI https://github.com/anbang278/finance-tax-policy-acquisition/actions/runs/37165658400 的 macOS 全部 PASS，支持回环服务不再等待 DNS 的修复；Ubuntu 暴露既有页面隐藏轮询竞态（此前基准提交的远程 CI 也有同一断言失败）。刷新入口、连续查询及待处理刷新现均检查页面可见性，隐藏时使旧结果失效并停止后续请求，恢复可见立即刷新；浏览器测试在页面隐藏且旧请求结束后开始观察，排除把隐藏前请求误计为后台请求。更新检测与 Web Chromium 定向验证 65 passed（19.06 秒）。本轮最终三平台结果以新提交对应 Actions 为准。
 
 页面轮询修复后完整 Chromium 回归再次验证：299 passed / 1 skipped，49.10 秒；ruff、修改 Python 文件格式检查、git diff --check PASS。
+
+
+第三轮 CI https://github.com/anbang278/finance-tax-policy-acquisition/actions/runs/37165891147 的 Ubuntu PASS；macOS 暴露两个测试本身的调度假设：进度线程未必在固定 40ms 内执行，完整检测（含缓存 I/O）未必在 150ms 内返回。测试改用进度实际输出事件和未释放网络阻塞事件；仍验证周期输出仅进入 stderr、检测 TIMEOUT 返回且早于网络完成，并保持安全宽裕的失败上限，不修改业务超时。针对性 2 passed；完整最终结果以随后记录及新 Actions 为准。
+
+线程事件验证调整后本机完整 Chromium 回归 299 passed / 1 skipped（50.28 秒），ruff、修改测试文件格式及 diff 检查 PASS；没有放宽功能断言或改变产品超时配置。

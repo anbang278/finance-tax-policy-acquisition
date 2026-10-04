@@ -13,4 +13,4 @@
 
 本版本整体数据结构包含 SQLite schema v4。更新前按既有流程备份；旧程序不能写新版本数据库，回退时须在新目录恢复升级前备份。定时服务默认关闭，管理仍需本人明确开启；本次 GitHub 发布不代表真实政策采集、宿主安装、服务部署或生产权限隔离验收。
 
-本机完整 Chromium 回归：299 passed / 1 skipped（Windows 原生入口未在 macOS 执行），49.10 秒；版本 0.1.1 的静态检查、锁文件检查、构建和独立 wheel 验证通过。远程 CI 结果以 GitHub Actions 为准；Windows/Linux 真实设备验收尚未执行。
+本机完整 Chromium 回归：299 passed / 1 skipped（Windows 原生入口未在 macOS 执行），50.28 秒；版本 0.1.1 的静态检查、锁文件检查、构建和独立 wheel 验证通过。远程 CI 结果以 GitHub Actions 为准；Windows/Linux 真实设备验收尚未执行。

@@ -5,6 +5,7 @@ import logging
 import os
 import subprocess
 import sys
+import threading
 import time
 from datetime import date
 from importlib.resources import files
@@ -225,9 +226,19 @@ def test_interrupted_signal_and_stale_record_recovery_readonly(tmp_path, monkeyp
 def test_periodic_progress_uses_stderr_and_leaves_json_stdout(tmp_path, monkeypatch, capsys):
     collector, task, _, _ = prepare_queue(tmp_path, collection={"progress_interval_seconds": 0.01})
 
+    reported = threading.Event()
+    real_print = print
+
+    def observe(*args, **kwargs):
+        real_print(*args, **kwargs)
+        if args and str(args[0]).startswith("ftr progress "):
+            reported.set()
+
+    monkeypatch.setattr("ftr.runtime.print", observe, raising=False)
+
     def source(*args):
         collector._checkpoint(task, "mof", time.monotonic())
-        time.sleep(0.04)
+        assert reported.wait(2), "periodic reporter did not emit progress"
         raise BudgetReached("预算")
 
     monkeypatch.setattr(collector, "_run_source", source)

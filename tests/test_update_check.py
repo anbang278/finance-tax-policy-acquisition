@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import threading
 import time
 from types import SimpleNamespace
 
@@ -201,16 +202,27 @@ def test_corrupt_cache_permissions_and_lock(tmp_path, monkeypatch):
 
 
 def test_deadline_and_sanitized_failure(tmp_path, monkeypatch):
+    release, completed = threading.Event(), threading.Event()
+
     def slow(*_a):
-        time.sleep(0.2)
-        raise RuntimeError("http://password:secret@example.invalid")
+        try:
+            release.wait(5)
+            raise RuntimeError("http://password:secret@example.invalid")
+        finally:
+            completed.set()
 
     monkeypatch.setattr(uc, "_compare", slow)
     start = time.monotonic()
-    value = uc.check_for_updates(settings(tmp_path, timeout_seconds=0.05), local=identity())
-    assert time.monotonic() - start < 0.15
-    assert value["error_code"] == "TIMEOUT"
-    assert "secret" not in json.dumps(value)
+    try:
+        value = uc.check_for_updates(settings(tmp_path, timeout_seconds=0.05), local=identity())
+        # Prove return precedes completion of blocked I/O, without a 150ms scheduling gate.
+        assert not completed.is_set()
+        assert time.monotonic() - start < 2
+        assert value["error_code"] == "TIMEOUT"
+        assert "secret" not in json.dumps(value)
+    finally:
+        release.set()
+        assert completed.wait(2)
 
 
 @pytest.mark.parametrize("payload", [{"sha": "bad"}, [], {"sha": None}])
