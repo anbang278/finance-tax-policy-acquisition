@@ -14,6 +14,8 @@
 
 本机完整 Chromium 回归通过 347 项，跳过 1 项 Windows 专属用例；静态检查、构建和源码目录外 wheel 安装验证通过。真实模型服务、真实财税资料和人工语义质量尚未验收。完整证据见 [知识与 Wiki 验收](docs/verification/knowledge-wiki-acceptance.md)，发布检查见 [0.1.2 发布记录](docs/verification/release-0.1.2.md)。
 
+发布验收：[PR 三平台 CI](https://github.com/anbang278/finance-tax-policy-acquisition/actions/runs/39766848271) 全部通过，独立代码审查 PASS；官方 main 与更新检测已实际核对。详细数量、制品及边界见 [发布记录](docs/verification/release-0.1.2.md)。
+
 ## 0.1.1 — 2026-10-04
 
 本版本包含 GitHub 更新提醒、持续定时获取及本机管理工作台。

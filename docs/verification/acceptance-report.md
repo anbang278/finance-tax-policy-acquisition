@@ -269,4 +269,11 @@ PASS（本机）：只读扫描全部 60 条记录（本次无额外历史版本
 
 ## 知识加工与领域 Wiki（2026-10-22）
 
-本机隔离工程 PASS；完整 Chromium 回归 347 passed / 1 skipped，ruff/mypy/改动格式/构建及源码外独立 wheel PASS。真实 API 与财税人员语义评测未验证；真实资料库仍为 schema 0。M0–M5、A01–A28、宿主虚构资料加工和来源修订证据见 [本轮验收](knowledge-wiki-acceptance.md)。未执行真实资料发布、提交推送或部署。
+本机隔离工程 PASS；完整 Chromium 回归 347 passed / 1 skipped，ruff/mypy/改动格式/构建及源码外独立 wheel PASS。真实 API 与财税人员语义评测未验证；真实资料库仍为 schema 0。M0–M5、A01–A28、宿主虚构资料加工和来源修订证据见 [本轮验收](knowledge-wiki-acceptance.md)。未执行真实资料发布或部署；0.1.2 代码发布与 GitHub 验证另见 [发布记录](release-0.1.2.md)。
+
+
+## 0.1.2 发布验证（2026-10-22）
+
+[PR #1](https://github.com/anbang278/finance-tax-policy-acquisition/pull/1) 已合入 main，功能提交 dab7c23、合并提交 989123c。[三平台 PR CI](https://github.com/anbang278/finance-tax-policy-acquisition/actions/runs/39766848271) 全部通过：macOS 347 passed / 1 skipped，Ubuntu 346 passed / 2 skipped，Windows 343 passed / 5 skipped；包含 Chromium、静态检查、构建及源码外 wheel。四项独立审查问题已修复并补充12个边界场景，第二轮独立审查 PASS。
+
+官方 main 版本 0.1.2 已回读，真实匿名更新检测验证新提交 UP_TO_DATE、0.1.1 身份 UPDATE_AVAILABLE。此收尾提交仅改文档并使用 [skip ci]；最终下载制品从干净提交构建并保留身份，详见 [发布记录](release-0.1.2.md)。真实资料库未迁移；真实模型、财税资料质量与人工语义验收仍未验证。

@@ -4,7 +4,7 @@
 
 ## 结论与范围
 
-**PASS：本机隔离工程验收。PARTIAL：真实供应商 API、真实财税资料质量与人工业务验收。**
+**PASS：本机隔离工程验收及三平台 CI。PARTIAL：真实供应商 API、真实财税资料质量与人工业务验收。**
 
 已实现资料/附件证据定位、中文检索、知识版本、宿主与兼容 API 执行器、独立 AI 预审、人工审核启用、跨资料 Wiki、人工草稿保护、原子发布、历史/差异/导出、来源影响与待认领队列、管理页面及备份恢复。没有以静态页面或占位结果替代加工。
 
@@ -29,6 +29,7 @@
 |---|---|
 | `FTR_WEB_BROWSER=1 ... pytest -q` | **347 passed, 1 skipped，63.07 秒**；含 1440px 与 390px 新流程 |
 | 最后补充的已保存 API 结果恢复专项 | PASS；不重新调用模型，使用已持久结果完成入库 |
+| PR 三平台 CI | [completed/success](https://github.com/anbang278/finance-tax-policy-acquisition/actions/runs/39766848271)；macOS 347/1、Ubuntu 346/2、Windows 343/5（通过/跳过），见 [发布记录](release-0.1.2.md) |
 | `ruff check src tests scripts` | PASS |
 | `mypy --ignore-missing-imports src` | PASS，42 个源文件；沿既有忽略第三方缺失声明口径 |
 | 改动 Python 文件格式检查 | PASS，27 个文件 |
@@ -105,7 +106,9 @@
 
 ## 变更文件清单
 
+- `.codex-plugin/plugin.json`
 - `ARCHITECTURE.md`
+- `CHANGELOG.md`
 - `README.md`
 - `docs/README.md`
 - `docs/development/design.md`
@@ -124,10 +127,14 @@
 - `docs/verification/knowledge-wiki/mobile.png`
 - `docs/verification/knowledge-wiki/revised-wiki.md`
 - `docs/verification/knowledge-wiki/revision.diff`
+- `docs/verification/release-0.1.2.md`
 - `docs/verification/test-plan.md`
 - `ftr.example.yaml`
+- `plugin.json`
+- `pyproject.toml`
 - `scripts/verify_wheel.py`
 - `skills/knowledge-wiki/SKILL.md`
+- `src/ftr/__init__.py`
 - `src/ftr/adapters/common.py`
 - `src/ftr/backup.py`
 - `src/ftr/cli.py`
@@ -158,3 +165,4 @@
 - `tests/test_management.py`
 - `tests/test_scheduler.py`
 - `tests/test_usability_upgrade.py`
+- `uv.lock`
