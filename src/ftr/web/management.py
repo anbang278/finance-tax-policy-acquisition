@@ -71,6 +71,10 @@ def install(app, root: Path, settings: RuntimeSettings, session: ManagementSessi
         if request.cookies.get("ftr_manage") not in session.sessions:
             raise HTTPException(403, "缺少有效本机管理会话")
 
+    from ftr.knowledge.web import install as install_knowledge
+
+    install_knowledge(app, root, authorize)
+
     @app.get("/api/manage/session")
     def session_status(request: Request):
         return response(

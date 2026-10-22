@@ -143,6 +143,39 @@ class UpdateCheckSettings(SettingsModel):
     timeout_seconds: float = Field(default=3, gt=0, le=30, allow_inf_nan=False, strict=True)
 
 
+class ProcessingSettings(SettingsModel):
+    enabled: StrictBool = False
+    base_url: str | None = None
+    model: str | None = None
+    api_key_env: str = Field(default="MODEL_API_KEY", pattern=r"^[A-Z][A-Z0-9_]*$")
+    auth_mode: Literal["bearer", "none"] = "bearer"
+    response_format: Literal["json_schema", "json_object", "text"] = "json_object"
+    token_limit_parameter: Literal["max_completion_tokens", "max_tokens"] = "max_completion_tokens"
+    timeout_seconds: float = Field(default=120, gt=0, le=600, allow_inf_nan=False)
+    max_output_tokens: int = Field(default=8192, ge=128, le=65536, strict=True)
+
+    @model_validator(mode="after")
+    def endpoint(self):
+        if self.api_key_env.startswith("FTR_"):
+            raise ValueError("模型密钥环境变量不得使用 FTR_ 配置前缀")
+        if self.base_url:
+            parsed = urlsplit(self.base_url)
+            if (
+                parsed.scheme not in ("https", "http")
+                or not parsed.hostname
+                or parsed.username
+                or parsed.password
+                or parsed.query
+                or parsed.fragment
+            ):
+                raise ValueError("模型服务地址无效；不接受内嵌凭据或查询参数")
+            if parsed.scheme == "http" and parsed.hostname not in ("localhost", "127.0.0.1", "::1"):
+                raise ValueError("远程模型服务必须使用 HTTPS")
+        if self.enabled and (not self.base_url or not self.model):
+            raise ValueError("启用模型 API 须配置 base_url 和 model")
+        return self
+
+
 class RuntimeSettings(SettingsModel):
     data_dir: Path = Field(default_factory=lambda: Path.home() / ".local" / "share" / "ftr")
     network: NetworkSettings = Field(default_factory=NetworkSettings)
@@ -151,6 +184,7 @@ class RuntimeSettings(SettingsModel):
     web: WebSettings = Field(default_factory=WebSettings)
     scheduler: SchedulerSettings = Field(default_factory=SchedulerSettings)
     update_check: UpdateCheckSettings = Field(default_factory=UpdateCheckSettings)
+    processing: ProcessingSettings = Field(default_factory=ProcessingSettings)
     _origins: dict[str, str] = PrivateAttr(default_factory=dict)
     _config_path: Path | None = PrivateAttr(default=None)
 
@@ -258,7 +292,18 @@ def load_settings(
                 raw: Any = env[name]
                 if field in ("proxy_url", "executable_path") and not raw.strip():
                     raw = None
-                if field not in ("host", "proxy_mode", "proxy_url", "executable_path"):
+                if field not in (
+                    "host",
+                    "proxy_mode",
+                    "proxy_url",
+                    "executable_path",
+                    "base_url",
+                    "model",
+                    "api_key_env",
+                    "auth_mode",
+                    "response_format",
+                    "token_limit_parameter",
+                ):
                     try:
                         raw = yaml.safe_load(raw)
                     except yaml.YAMLError as exc:

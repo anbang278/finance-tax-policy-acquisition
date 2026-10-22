@@ -17,3 +17,5 @@
 - [本机定时任务管理与人工复核](guides/local-management.md)：一次性入口、持久命令、异步执行、草稿与轮次。
 
 - [项目代码更新检测](guides/update-check.md)：main 提交比较、CLI/工作台提醒、缓存与离线设置。
+
+- [知识加工与领域 Wiki](guides/knowledge-wiki.md)：双执行器、人工审核发布、证据定位、更新维护与迁移回退。

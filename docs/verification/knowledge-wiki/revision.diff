@@ -1,0 +1,28 @@
+--- 正式版本
+
++++ 候选版本
+
+@@ -17,7 +17,7 @@
+
+     {
+       "human_maintained": false,
+       "knowledge_versions": [
+-        "9a14dbfdbea2487a8a161b129551ec74"
++        "3bf4fb549dc34cd597aaf9c5e1261e62"
+       ],
+       "section_id": "base",
+       "text": "关联交易支出从基数中排除；它并不当然等于整个企业失去资格。",
+@@ -26,10 +26,10 @@
+
+     {
+       "human_maintained": false,
+       "knowledge_versions": [
+-        "cce88b71e9dd4588a780c5256a60eb11"
++        "b35a5ca1aefd4949aad697cd6590e435"
+       ],
+       "section_id": "retention",
+-      "text": "样例要求年度结束后留存三年；年度及具体截止日期未说明。",
++      "text": "修订样例要求年度结束后留存四年；这是从三年到四年的明确变更，旧版本完整保留。",
+       "title": "保留申请资料"
+     }
+   ]

@@ -39,3 +39,14 @@ update_check:
   cache_seconds: 86400  # 成功结果缓存 24 小时
   failure_retry_seconds: 3600  # 检查失败退避 1 小时
   timeout_seconds: 3  # 每轮联网检查总截止时间
+
+processing:
+  enabled: false  # 启用后仍只执行用户明确启动的任务
+  base_url: null  # OpenAI 兼容服务的 /v1 根地址；远程使用 HTTPS
+  model: null
+  api_key_env: MODEL_API_KEY  # 密钥只在环境变量中配置，避免 FTR_ 前缀
+  auth_mode: bearer  # 本机无鉴权服务可明确选择 none
+  response_format: json_object  # json_schema / json_object / text，不自动切换
+  token_limit_parameter: max_completion_tokens  # 旧兼容服务可选择 max_tokens
+  timeout_seconds: 120
+  max_output_tokens: 8192

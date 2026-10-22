@@ -759,7 +759,7 @@ def test_old_v3_readonly_review_before_incremental_migration(tmp_path):
     assert (tmp_path / "database.sqlite3").read_bytes() == before
     execute(tmp_path, "review.draft", conclusion(tmp_path, rid))
     with closing(Repository(tmp_path, readonly=True)) as repo:
-        assert repo.db.execute("PRAGMA user_version").fetchone()[0] == 4
+        assert repo.db.execute("PRAGMA user_version").fetchone()[0] == 5
     assert review_detail(tmp_path, rid)["draft"]
 
 

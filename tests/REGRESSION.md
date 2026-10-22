@@ -69,3 +69,8 @@ test_management.py 覆盖受保护会话、持久队列、期望版本、原子�
 test_update_check.py 使用 HTTP 替身和临时缓存验证提交关系、离线/限流/总截止时间、代理脱敏、失败不阻断、只读入口、并发缓存与工作台运行身份。tests/conftest.py 默认禁用子进程自动联网、隔离本进程缓存并替换检测网络；专用测试显式启用，不访问政策源站。FTR_WEB_BROWSER=1 覆盖桌面/390px提醒、伪时钟长期刷新、重启/过期/失败状态。verify_wheel.py 额外比对 sdist→wheel 构建身份并验证独立安装/只读更新 API；真实 GitHub 连通性另用临时缓存抽查。
 
 浏览器全流程另覆盖受控启停/立即获取/来源操作/补取版本跳转；回归发现并修复来源按钮事件与原来源弹窗冲突、嵌套 SQLite 快照导致的并发等待。测试按来源 ID 定位，不依赖 SQLite 行顺序。
+
+
+## 知识与 Wiki（2026-10-22）
+
+新增 test_knowledge.py，覆盖 v5/早期迁移与故障回滚、正文/文本 PDF/中文索引、知识与 Wiki 版本、宿主与 API 共用回传、独立预审、人工确认、草稿/维护章节保护、来源影响、结果幂等和持久回放、长结果与备份。完整 Chromium 模式参数化 1440/390px 跑创建至发布导出；可选 KNOWLEDGE_AUDIT_EVIDENCE 输出截图。所有内容虚构并使用新临时目录；MockTransport 不证明真实供应商网络。验收边界见 docs/verification/knowledge-wiki-acceptance.md。

@@ -1,0 +1,119 @@
+{
+  "job_id": "95b91f53bbd74668bb2a2a675c2caca2",
+  "attempt_id": "fc2101e4ec174aa980c2e7b187fe4c9f",
+  "input_digest": "9d7d1bc4be4b457054fa2187b41c690fa2510d6efe59be619043f91f08e2bf30",
+  "submission_key": "codex-host-actual-1",
+  "outputs": [
+    {
+      "kind": "item",
+      "title": "虚构样例：测试优惠申请资格",
+      "content": {
+        "statement": "虚构资料 A 仅说明甲类研发企业在指定期间满足两项条件后可申请测试优惠，不等于已经获准享受。",
+        "nature": "source_rule",
+        "conditions": [
+          "甲类研发企业",
+          "2026年1月1日至2026年12月31日",
+          "年度资料齐全",
+          "在测试辖区登记"
+        ],
+        "exceptions": [],
+        "limitations": [
+          "纯虚构样例，不是企业所得税政策依据",
+          "获批条件和实际享受方式未给出"
+        ],
+        "citations": [
+          {
+            "record_id": "fd91b14f87c44a5c9b0c1dd902903f1f",
+            "evidence_id": "a8b7d56a8836909fd78e6c2ac32578a8596c45eed63943fab06a2676a686cb01",
+            "source_part": "body",
+            "segment_id": "0ac78c27c5086af126a5821ae1cdaa63a5138e0b1463280e956c2c5d10b4b9e5",
+            "text_version_digest": "a8b7d56a8836909fd78e6c2ac32578a8596c45eed63943fab06a2676a686cb01",
+            "page_number": null,
+            "quote": "【虚构测试资料 A，不是政策】2026年1月1日至12月31日，甲类研发企业可申请测试优惠，需同时满足年度资料齐全和在测试辖区登记。",
+            "start_offset": 0,
+            "end_offset": 66
+          }
+        ],
+        "valid_from": "2026-01-01",
+        "valid_to": "2026-12-31"
+      }
+    },
+    {
+      "kind": "item",
+      "title": "虚构样例：计入基数的排除项",
+      "content": {
+        "statement": "虚构资料 B 排除了关联交易支出，该排除针对测试优惠基数，不能据此直接认定关联企业失去申请资格。",
+        "nature": "synthesis",
+        "conditions": [
+          "适用资料 A 的测试优惠"
+        ],
+        "exceptions": [
+          "关联交易支出不纳入基数"
+        ],
+        "limitations": [
+          "资料未定义关联交易范围",
+          "纯虚构样例，不可据此处理真实税务"
+        ],
+        "citations": [
+          {
+            "record_id": "fd91b14f87c44a5c9b0c1dd902903f1f",
+            "evidence_id": "a8b7d56a8836909fd78e6c2ac32578a8596c45eed63943fab06a2676a686cb01",
+            "source_part": "body",
+            "segment_id": "0ac78c27c5086af126a5821ae1cdaa63a5138e0b1463280e956c2c5d10b4b9e5",
+            "text_version_digest": "a8b7d56a8836909fd78e6c2ac32578a8596c45eed63943fab06a2676a686cb01",
+            "page_number": null,
+            "quote": "【虚构测试资料 A，不是政策】2026年1月1日至12月31日，甲类研发企业可申请测试优惠，需同时满足年度资料齐全和在测试辖区登记。",
+            "start_offset": 0,
+            "end_offset": 66
+          },
+          {
+            "record_id": "7dfd549a6da544f392eb4ac25451e59b",
+            "evidence_id": "d195578c503747f67c70e02ee7ca4c36a81245439f087de3908be465be8a85a7",
+            "source_part": "body",
+            "segment_id": "ec0085ebbdec48109f8722b97a72125ce5629a46b1494005d199788c12cda9dd",
+            "text_version_digest": "d195578c503747f67c70e02ee7ca4c36a81245439f087de3908be465be8a85a7",
+            "page_number": null,
+            "quote": "【虚构测试资料 B，不是政策】资料 A 的补充：关联交易支出不纳入测试优惠基数；申请资料在年度结束后留存三年。",
+            "start_offset": 0,
+            "end_offset": 55
+          }
+        ],
+        "reasoning": "A 规定主体申请资格；B 明确使用“基数”限定排除对象。因此保留两者适用层次，避免把支出排除扩大为主体资格排除。"
+      }
+    },
+    {
+      "kind": "item",
+      "title": "虚构样例：申请资料留存",
+      "content": {
+        "statement": "虚构资料 B 要求申请资料在年度结束后留存三年。",
+        "nature": "source_rule",
+        "conditions": [
+          "与测试优惠有关的申请资料"
+        ],
+        "exceptions": [],
+        "limitations": [
+          "资料未给出年度定义或具体截止日期",
+          "纯虚构样例，不代表真实资料保管期限"
+        ],
+        "citations": [
+          {
+            "record_id": "7dfd549a6da544f392eb4ac25451e59b",
+            "evidence_id": "d195578c503747f67c70e02ee7ca4c36a81245439f087de3908be465be8a85a7",
+            "source_part": "body",
+            "segment_id": "ec0085ebbdec48109f8722b97a72125ce5629a46b1494005d199788c12cda9dd",
+            "text_version_digest": "d195578c503747f67c70e02ee7ca4c36a81245439f087de3908be465be8a85a7",
+            "page_number": null,
+            "quote": "【虚构测试资料 B，不是政策】资料 A 的补充：关联交易支出不纳入测试优惠基数；申请资料在年度结束后留存三年。",
+            "start_offset": 0,
+            "end_offset": 55
+          }
+        ]
+      }
+    }
+  ],
+  "executor": {
+    "mode": "host",
+    "model": "unknown",
+    "host": "Codex"
+  }
+}

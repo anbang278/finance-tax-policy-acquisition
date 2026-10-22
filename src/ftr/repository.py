@@ -116,14 +116,28 @@ class Repository:
         data_dir.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(self.path, factory=AtomicConnection)
         self.db.row_factory = sqlite3.Row
+        self.db.execute("PRAGMA foreign_keys=ON")
         version = self.db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 4:
+        if version > 5:
             self.db.close()
             raise ValueError("数据库版本高于当前程序，请升级程序后再写入")
-        self.db.executescript(SCHEMA)
+        if (
+            version < 5
+            and self.db.execute("SELECT 1 FROM sqlite_master WHERE name='documents'").fetchone()
+        ):
+            from ftr.backup import create_backup
+            from ftr.models import new_id
+
+            backup = data_dir.parent / (data_dir.name + "-migration-" + new_id())
+            try:
+                create_backup(data_dir, backup)
+            except Exception:
+                self.db.close()
+                raise
+        scripts = [SCHEMA]
         # Additive migration only in the explicit writer path; no old record rewrites.
         if version < 2:
-            self.db.executescript("""
+            scripts.append("""
                 BEGIN;
                 CREATE TABLE IF NOT EXISTS attachment_work (
                     task_id TEXT NOT NULL REFERENCES tasks(id), source_id TEXT NOT NULL,
@@ -142,7 +156,7 @@ class Repository:
                 COMMIT;
             """)
         if version < 3:
-            self.db.executescript("""
+            scripts.append("""
                 BEGIN;
                 CREATE TABLE IF NOT EXISTS scheduler_meta (
                     id INTEGER PRIMARY KEY CHECK(id=1), config_json TEXT NOT NULL,
@@ -156,7 +170,7 @@ class Repository:
             """)
 
         if version < 4:
-            self.db.executescript("""
+            scripts.append("""
                 BEGIN;
                 CREATE TABLE IF NOT EXISTS managed_plan (
                     id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL,
@@ -181,6 +195,19 @@ class Repository:
                 PRAGMA user_version=4;
                 COMMIT;
             """)
+
+        if version < 5:
+            from ftr.knowledge.schema import SCHEMA as KNOWLEDGE_SCHEMA
+
+            scripts.append(KNOWLEDGE_SCHEMA)
+            try:
+                self.db.execute("PRAGMA foreign_keys=ON")
+                sql = "\n".join(scripts).replace("BEGIN;", "").replace("COMMIT;", "")
+                self.db.executescript("BEGIN;\n" + sql + "\nCOMMIT;")
+            except Exception:
+                self.db.rollback()
+                self.db.close()
+                raise
 
     def close(self) -> None:
         self.db.close()
@@ -534,5 +561,8 @@ class Repository:
         return [
             doc
             for doc in docs
-            if query in doc.title or query in doc.body_text or query in (doc.document_number or "")
+            if query in doc.title
+            or query in doc.body_text
+            or query in (doc.document_number or "")
+            or any(query in (a.text or "") for a in doc.attachments if a.extraction_state == "text")
         ]

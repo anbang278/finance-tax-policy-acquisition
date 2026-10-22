@@ -123,3 +123,7 @@ web:
 | update_check.timeout_seconds | 3 | 大于 0、至多 30 的有限秒数 |
 
 环境变量按 FTR_UPDATE_CHECK__字段名大写 映射，YAML/env/default 与现有规则一致。官方仓库与 main 不是可修改运行参数；结果及缓存路径见[更新检测](update-check.md)。
+
+## processing 模型执行配置（2026-10-22）
+
+模板增加可选 processing 分组，默认 enabled=false。字段和默认值见 ftr.example.yaml；base_url/model 必须显式配置，api_key_env 仅保存环境变量名，密钥本身不入配置。支持响应格式和输出参数名的显式兼容选项；默认 120 秒/8192 tokens/单并发。每任务冻结调用次数及输入大小，超过预算不会截断或自动扩大。完整用法见 [知识与 Wiki](knowledge-wiki.md)。

@@ -81,12 +81,13 @@ def create_backup(data_dir: Path, destination: Path) -> dict:
             shutil.copytree(data_dir / "evidence", destination / "evidence")
         if (data_dir / "rules").exists():
             shutil.copytree(data_dir / "rules", destination / "rules", symlinks=True)
-        if (data_dir / "commands").exists():
-            if (data_dir / "commands").is_symlink():
-                raise ValueError("命令目录不得为符号链接")
-            # Web enqueues outside the business write lock; freeze its spool separately.
-            with portalocker.Lock(str(data_dir / ".commands.lock"), timeout=1):
-                shutil.copytree(data_dir / "commands", destination / "commands", symlinks=True)
+        # Freeze all non-DB task artifacts with the same spool lock.
+        with portalocker.Lock(str(data_dir / ".commands.lock"), timeout=1):
+            for name in ("commands", "processing_blobs", "processing_receipts"):
+                if (data_dir / name).is_symlink():
+                    raise ValueError("任务制品目录不得为符号链接")
+                if (data_dir / name).exists():
+                    shutil.copytree(data_dir / name, destination / name, symlinks=True)
         manifest = {"created_at": utc_now().isoformat(), "files": _files(destination)}
         (destination / "manifest.json").write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -117,6 +118,11 @@ def verify_backup(backup_dir: Path) -> dict:
                 raise ValueError("备份证据引用或哈希不匹配")
     finally:
         db.close()
+    for receipt in (backup_dir / "processing_receipts").glob("*.json"):
+        value = json.loads(receipt.read_text(encoding="utf-8"))
+        from ftr.knowledge.processing import read_blob
+
+        read_blob(backup_dir, value["blob_id"])
     return {"file_count": len(expected), "verified": True}
 
 

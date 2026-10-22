@@ -101,7 +101,14 @@ except ValidationError:
 else:
     raise AssertionError("未知范围字段没有拒绝")
 task = repo.create_task(TaskRequest(source_ids=["mof"],date_from=date(2026,9,1),date_to=date(2026,9,30)))
-assert repo.db.execute("PRAGMA user_version").fetchone()[0] == 4
+assert repo.db.execute("PRAGMA user_version").fetchone()[0] == 5
+from ftr.knowledge.service import Knowledge
+from ftr.knowledge.models import ProcessingResult
+knowledge=Knowledge(repo)
+knowledge.seed()
+assert len(knowledge.listing("topics"))==3
+assert ProcessingResult.model_json_schema()["properties"]["job_id"]
+assert settings.processing.enabled is False
 repo.close()
 from ftr.cli import parser,run
 before = (settings.data_dir / "database.sqlite3").read_bytes()
@@ -123,7 +130,7 @@ for sample in json.loads((files("ftr") / "data" / "rule-fixtures.json").read_tex
 async def verify():
     app = create_app(settings.data_dir, WebSettings(host="0.0.0.0"))
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://192.168.1.20") as client:
-        for path in ("/", "/static/app.js", "/static/manage.js", "/static/style.css", "/static/favicon.svg", "/api/ui-config", "/api/overview", "/api/policies", "/api/tasks", "/api/sources", "/api/scheduler", "/api/update-status", "/api/manage/plan", "/api/manage/operations", "/api/reviews"):
+        for path in ("/", "/static/app.js", "/static/manage.js", "/static/style.css", "/static/favicon.svg", "/api/ui-config", "/api/overview", "/api/policies", "/api/tasks", "/api/sources", "/api/scheduler", "/api/update-status", "/api/manage/plan", "/api/manage/operations", "/api/reviews", "/wiki", "/static/wiki.js", "/static/wiki.css", "/api/knowledge/overview"):
             result = await client.get(path)
             assert result.status_code == 200, (path, result.status_code)
         assert not (await client.get("/api/manage/session")).json()["management_enabled"]

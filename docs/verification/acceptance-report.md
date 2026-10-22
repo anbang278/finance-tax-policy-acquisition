@@ -265,3 +265,8 @@ PASS（本机）：只读扫描全部 60 条记录（本次无额外历史版本
 最终功能/测试提交 bb43c6c03a1c2a9d467118b7b53a469e7eae0b82 的[三平台 CI](https://github.com/anbang278/finance-tax-policy-acquisition/actions/runs/37166131508) 已 completed/success，Ubuntu 24.04、Windows latest、macOS latest 均 success，覆盖实际 Chromium、测试、ruff、mypy、构建及源码外独立安装；Windows 同时执行 PowerShell 入口语法验证。此前失败记录保留，不冒充首轮通过。本机最终回归为 299 passed / 1 skipped（50.28 秒），本机 Windows 专属跳过已由 Windows CI 补充执行。
 
 本次同步五处版本为 0.1.1，发布更新检测、定时获取和本机管理工作台。官方 main 的提交与包版本已实际回读；匿名实际检查已验证新提交 UP_TO_DATE、旧 0.1.0 提交 UPDATE_AVAILABLE。定时配置默认关闭，未真实采集、执行资料复核、安装宿主或部署。末尾收尾提交仅修改 CHANGELOG 与本验收文档，以 [skip ci] 避免重复执行未变的工程代码；其工程证据对应上述 bb43c6c。发布制品在收尾提交后从干净工作区重新构建，以该 HEAD 写入身份。
+
+
+## 知识加工与领域 Wiki（2026-10-22）
+
+本机隔离工程 PASS；完整 Chromium 回归 347 passed / 1 skipped，ruff/mypy/改动格式/构建及源码外独立 wheel PASS。真实 API 与财税人员语义评测未验证；真实资料库仍为 schema 0。M0–M5、A01–A28、宿主虚构资料加工和来源修订证据见 [本轮验收](knowledge-wiki-acceptance.md)。未执行真实资料发布、提交推送或部署。

@@ -86,3 +86,7 @@ D-02 采用已确认的完整性优先回退：分页证据与检查点可追踪
 ## GitHub 更新检测实现（2026-10-04）
 
 新增共享 update_check.py、UpdateCheckSettings、update check/--force、setup 独立报告和启动阶段 stderr 提醒。Web lifespan 后台检测与 /api/update-status 快照，前端顶部显示版本及非弹窗提醒，资源标识 update-check-1。hatch_build.py 将提交、版本、dirty 身份映射到构建制品；独立 wheel 验证 sdist 身份一致与脱离源码识别。既有未提交定时/管理工作台改动保留，无迁移或发布版本变更。验证结果见 ../verification/acceptance-report.md 本轮记录。
+
+## 知识与 Wiki 实施（2026-10-22）
+
+在 codex/finance-tax-wiki 分支实施，保留既有 README 与本文件链接修改及旧嵌套仓库现场。新增 knowledge 包和独立 /wiki 工作台；通过管理队列连接后台与人工操作。原有采集流程继续复用，未执行真实采集、真实库迁移、实际资料复核、正式知识发布、提交推送或部署。M0–M5 对照与实际验证见 ../verification/knowledge-wiki-acceptance.md。

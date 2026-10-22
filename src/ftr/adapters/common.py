@@ -9,7 +9,7 @@ from lxml import html
 from ftr.content_layout import body_text_of
 from ftr.models import Attachment, DiscoveredRef, DocumentRecord, DocumentType, digest
 
-DATE_PATTERN = re.compile(r"(20\d{2})[年./-]\s*(\d{1,2})[月./-]\s*(\d{1,2})")
+DATE_PATTERN = re.compile(r"((?:19|20)\d{2})[年./-]\s*(\d{1,2})[月./-]\s*(\d{1,2})")
 
 
 def parse_date(value: str | None) -> date | None:

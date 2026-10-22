@@ -110,3 +110,15 @@ A05 按本轮确认改为“错误内容或错误分类不得通过”；合法�
 | 失败不阻断与缓存 | check_for_updates、CLI/setup | 截止时间、限流/退避/缓存过期/损坏/无权限/锁/原业务结果 |
 | 工作台后台及运行身份 | UpdateMonitor、/api/update-status、前端 | lifespan/查询不等待/冻结身份/Chromium 桌面窄屏与状态刷新 |
 | 构建制品来源 | hatch_build.py、verify_wheel.py | sdist→wheel 身份一致、独立安装识别 |
+
+## 知识与 Wiki 追踪（2026-10-22）
+
+| 范围 | 实现 | 验证入口 |
+|---|---|---|
+| M1 / A02–05、A17、A19、A27–28 | knowledge/schema、indexing、service；repository 迁移 | test_knowledge 的附件/PDF/索引/迁移/检索用例 |
+| M2 / A01、A06、A11–13、A23–25 | models、processing、commands、CLI | 宿主/MockTransport/API 错误/写锁/幂等用例 |
+| M3 / A04、A10、A14–16、A20 | service 版本/审核/发布/导出，wiki.js | 服务层门禁/事务故障/完整 Chromium 双视口 |
+| M4 / A07–09、A15–16 | service.scan/dependency、worker | 来源变化/等价核查/资格/时点用例 |
+| M5 / A18、A21–22、A26 | knowledge.web、受保护上传、backup、静态资源 | 只读/越界/备份、浏览器完整流程、verify_wheel |
+
+工程行为、模拟 API、真实模型语义及真实源站验收分开报告，状态以知识与 Wiki 验收记录为准。

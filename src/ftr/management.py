@@ -25,6 +25,7 @@ class Command(BaseModel):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
     id: str = Field(pattern=r"^[a-f0-9]{32}$")
     action: Literal[
+        "knowledge.apply",
         "plan.save",
         "plan.enable",
         "plan.disable",
@@ -41,6 +42,11 @@ class Command(BaseModel):
 
     @model_validator(mode="after")
     def constrained(self):
+        if self.action == "knowledge.apply":
+            from ftr.knowledge.commands import Operation
+
+            Operation.model_validate(self.payload).checked()
+            return self
         allowed = {
             "plan.save": set(SchedulerSettings.model_fields),
             "plan.enable": set(),
@@ -140,6 +146,8 @@ def effective_plan(root: Path, defaults: SchedulerSettings | None = None) -> dic
 
 def preflight(root: Path, command: Command) -> None:
     """Early HTTP conflict detection; the writer repeats validation at its checkpoint."""
+    if command.action == "knowledge.apply":
+        return
     with closing(Repository(root, readonly=True)) as repo:
         db = repo.db
         if _table(db, "management_operations"):
@@ -327,7 +335,13 @@ def _state_write(db, source, state):
     db.execute("INSERT OR REPLACE INTO scheduler_sources VALUES(?,?)", (source, json.dumps(state)))
 
 
-def apply_command(repo: Repository, command: Command, settings: RuntimeSettings) -> dict:
+def apply_command(
+    repo: Repository, command: Command, settings: RuntimeSettings, *, prepared_index=None
+) -> dict:
+    if command.action == "knowledge.apply":
+        from ftr.knowledge.commands import dispatch
+
+        return dispatch(repo, command.payload, settings, prepared_index)
     db, payload = repo.db, command.payload
     if command.action.startswith("plan."):
         row = db.execute("SELECT * FROM managed_plan WHERE id=1").fetchone()
@@ -561,6 +575,31 @@ def apply_command(repo: Repository, command: Command, settings: RuntimeSettings)
 
 def process_commands(settings: RuntimeSettings, *, recover=None, on_operation=None) -> list[dict]:
     results = []
+    prepared_indexes = {}
+    from ftr.knowledge.indexing import prepare_index, prepare_refresh
+
+    for candidate in (settings.data_dir / "commands").glob("*.json"):
+        if candidate.is_symlink():
+            continue
+        queued = Command.model_validate_json(candidate.read_text())
+        if queued.action == "knowledge.apply" and queued.payload.get("operation") in (
+            "index.rebuild",
+            "index.refresh",
+        ):
+            with closing(Repository(settings.data_dir, readonly=True)) as check:
+                done = check.db.execute(
+                    "SELECT 1 FROM management_operations WHERE id=?", (queued.id,)
+                ).fetchone()
+            if not done:
+                try:
+                    prepared_indexes[queued.id] = (
+                        prepare_index(settings.data_dir)
+                        if queued.payload["operation"] == "index.rebuild"
+                        else prepare_refresh(settings.data_dir, queued.payload["arguments"]["id"])
+                    )
+                except (ValueError, OSError, KeyError) as exc:
+                    prepared_indexes[queued.id] = exc
+
     with data_lock(settings.data_dir), closing(Repository(settings.data_dir)) as repo:
         for path in sorted(
             (settings.data_dir / "commands").glob("*.json"),
@@ -599,7 +638,14 @@ def process_commands(settings: RuntimeSettings, *, recover=None, on_operation=No
                                 },
                             }
                         )
-                    result = apply_command(repo, executable, settings)
+                    if command.id in prepared_indexes:
+                        if isinstance(prepared_indexes[command.id], Exception):
+                            raise prepared_indexes[command.id]
+                        result = apply_command(
+                            repo, executable, settings, prepared_index=prepared_indexes[command.id]
+                        )
+                    else:
+                        result = apply_command(repo, executable, settings)
                     state = "APPLIED"
                     if command.action == "review.recover":
                         # Material writes use existing content idempotence; completion can replay.
@@ -657,7 +703,9 @@ def process_commands(settings: RuntimeSettings, *, recover=None, on_operation=No
                 repo.db.rollback()
                 with repo.db:
                     result = {
-                        "code": "CONFLICT" if isinstance(exc, Conflict) else "INVALID",
+                        "code": getattr(
+                            exc, "code", "CONFLICT" if isinstance(exc, Conflict) else "INVALID"
+                        ),
                         "message": safe_message(exc),
                     }
                     repo.db.execute(
@@ -670,6 +718,10 @@ def process_commands(settings: RuntimeSettings, *, recover=None, on_operation=No
                             datetime.now(UTC).isoformat(),
                         ),
                     )
+                    if command.action == "knowledge.apply":
+                        from ftr.knowledge.commands import record_rejection
+
+                        record_rejection(repo, command.payload, exc)
             finally:
                 repo.db.defer_commit = False
                 if repo.db.in_transaction:
