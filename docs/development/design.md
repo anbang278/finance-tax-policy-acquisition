@@ -118,3 +118,11 @@ update_check.py 固定官方 repository/main，读取实际模块根目录的 Gi
 RuntimeSettings.update_check 管理启用/缓存/退避/超时。OS 用户缓存按安装路径隔离，原子文件+独立非阻塞 Portalocker；身份改变重新比较，失败保留 last_success 并标过期，服务端限流不能被 force 绕过。Web lifespan 管理 UpdateMonitor，启动时冻结身份和代码指纹，每分钟检查缓存/磁盘变化，GET 仅读内存。build hook 用临时目录映射身份到 sdist/wheel，sdist 二次构建保留来源信息；源码目录无生成制品。
 
 CLI update check 用 OperationResponse.data；状态为 UP_TO_DATE/UPDATE_AVAILABLE/LOCAL_AHEAD/DIVERGED/UNKNOWN/CHECK_FAILED/DISABLED。更新结果不进入 TaskRequest、业务 SQLite 或 Repair 门禁。完整操作契约见 ../guides/update-check.md。
+
+## 知识与 Wiki 设计（2026-10-22）
+
+`kw_objects` 区分 item/page，稳定身份关联专题；`kw_versions` 保存不可变标题/内容/父版本/人工基线/摘要；`kw_reviews` 追加 AI 或人工记录；`kw_publications` 与正式指针及管理命令同事务提交。草稿头和 edit_revision 独立，人工保存即变化。资料→知识、知识→章节依赖可重建。
+
+任务冻结资料、片段、知识、专题模板与人工基线。每次尝试独立；无结果等待，非法结果可纠正，同键异文拒绝，旧输入 stale；API 配置单独冻结，密钥仅在执行环境。模型调用由跨进程锁限制并发，网络期间无业务锁；输出内容寻址落盘后入持久命令队列，进程重启先回放已保存输出，未确认远端结果标 uncertain。
+
+默认 HTTP 只读，受保护 upload 最大 4 MiB，不接受服务器路径；CLI 与 Web 共用白名单命令、校验、审核和发布服务。检索分资料/知识/Wiki，正式读取实时复核依赖；未知适用区间不视为日期匹配。专题模板变化与来源、资格、知识版本、日期核查进入持久影响队列。

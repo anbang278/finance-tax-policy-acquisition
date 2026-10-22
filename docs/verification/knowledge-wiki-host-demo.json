@@ -1,0 +1,23 @@
+{
+  "fictional": true,
+  "host_model": "unknown",
+  "human_review": "simulated by fixture program",
+  "source_records": 3,
+  "initial_knowledge_versions": [
+    "33e4cd167cc7461b8f032d9da289ef6f",
+    "9a14dbfdbea2487a8a161b129551ec74",
+    "cce88b71e9dd4588a780c5256a60eb11"
+  ],
+  "initial_wiki_version": "cc9ac633a79c4c44b85650d1f7c3b589",
+  "source_change_dependency_state": "needs_review",
+  "revised_knowledge_versions": [
+    "33e4cd167cc7461b8f032d9da289ef6f",
+    "3bf4fb549dc34cd597aaf9c5e1261e62",
+    "b35a5ca1aefd4949aad697cd6590e435"
+  ],
+  "revised_wiki_version": "36e377e09ecf40b09103534982dcd03f",
+  "final_dependency_state": "checked",
+  "wiki_history_versions": 2,
+  "source_change": "留存三年改为四年",
+  "actual_remote_api_call": false
+}

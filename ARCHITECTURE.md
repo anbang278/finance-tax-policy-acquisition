@@ -1,6 +1,6 @@
 # 架构与运行状态
 
-一份 Python 包、七个 Skill、两个宿主清单。`config/sources.yaml` 为来源信任表，`contracts/official-material.yaml` 为采集意图契约。`ftr` 提供 JSON CLI，原始资料按 SHA-256 写入 `FTR_DATA_DIR/evidence`，任务和版本存于 SQLite。同一数据目录使用独占锁。
+一份 Python 包、八个 Skill、两个宿主清单。`config/sources.yaml` 为来源信任表，`contracts/official-material.yaml` 为采集意图契约。`ftr` 提供 JSON CLI，原始资料按 SHA-256 写入 `FTR_DATA_DIR/evidence`，任务和版本存于 SQLite。同一数据目录使用独占锁。
 
 采集：`CREATED → RUNNING → WAITING_DECISION / PARTIAL / COMPLETED / COMPLETED_EMPTY`。程序硬失败或附件不足进入隔离；新资料需要语义复核才能成为可检索的已验证版本。
 
@@ -54,3 +54,7 @@ diagnostics.task_report 为核心统一报告，供采集 data.report、只读 t
 ## GitHub 更新检测（2026-10-04）
 
 共享 update_check 模块在启动边界执行固定官方 main 只读比较，OS 用户缓存与业务存储隔离。CLI/stdout JSON 协议保持，提醒用 stderr；Web 后台线程持有启动时冻结身份，API 只读内存快照。新构建包携带提交/版本/修改标记；普通 ZIP 缺身份不宣称最新。检测失败、限流和缓存故障不影响业务，未引入自动更新、数据库迁移或新的 Repair 权限。
+
+## 知识与 Wiki 当前增量（2026-10-22）
+
+新增 `ftr.knowledge`：不可变正文/附件片段与 PDF 页码、可重建索引、知识/章节版本、人工编辑基线、双执行加工、独立 AI 预审、人工审核、原子发布和影响队列。SQLite v5，早期库先备份再单事务升级；Markdown 为导出。模型 I/O 和索引解析不持业务写锁，API 成功输出先持久保存再经同一命令队列入库。默认自动建立核查队列，用户显式启动加工，人工审核与启用/发布均独立。此前“不接模型 API”是对应历史阶段边界，本轮增加可选兼容执行器；默认禁用。公共接口与状态见 [指南](docs/guides/knowledge-wiki.md)。

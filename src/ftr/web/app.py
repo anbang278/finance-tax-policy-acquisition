@@ -145,6 +145,10 @@ def create_app(
             status_code=422,
         )
 
+    @app.get("/wiki")
+    def wiki_workspace():
+        return FileResponse(static / "wiki.html")
+
     @app.get("/api/update-status")
     def update_status() -> dict:
         return response(**monitor.read())

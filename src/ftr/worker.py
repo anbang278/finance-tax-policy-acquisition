@@ -239,6 +239,15 @@ def run(settings: RuntimeSettings, token: str, instance: str):
 
         for sig in (signal.SIGTERM, signal.SIGINT):
             signal.signal(sig, shutdown)
+        from contextlib import closing
+
+        from ftr.knowledge.processing import execute_next
+        from ftr.knowledge.service import Knowledge
+        from ftr.repository import Repository
+        from ftr.runtime import data_lock
+
+        processing_thread = None
+        last_knowledge_scan = time.monotonic()
         # Collectors run outside main thread so they cannot replace worker shutdown handlers.
         try:
             while not stop.is_set():
@@ -257,6 +266,22 @@ def run(settings: RuntimeSettings, token: str, instance: str):
                     )
                     if stop.is_set():
                         break
+                    if time.monotonic() - last_knowledge_scan > 30:
+                        with data_lock(root), closing(Repository(root)) as knowledge_repo:
+                            Knowledge(knowledge_repo).scan()
+                        last_knowledge_scan = time.monotonic()
+                    if processing_thread is None or not processing_thread.is_alive():
+
+                        def process_model():
+                            try:
+                                execute_next(settings, stop=stop)
+                            except Exception:  # noqa: BLE001 - keep background failure observable
+                                activity["processing_error"] = (
+                                    "后台知识加工异常；检查任务后显式重试"
+                                )
+
+                        processing_thread = threading.Thread(target=process_model, daemon=True)
+                        processing_thread.start()
                     activity.update(state="IDLE")
                     result: dict = {}
 

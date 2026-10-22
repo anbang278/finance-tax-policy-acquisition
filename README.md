@@ -11,7 +11,7 @@ confidence: implementation_verified_locally
 
 # 财税 AI 共创：政策获取子模块
 
-本项目从财政部政策发布和国家税务总局政策法规库获取公开资料，保存原始证据、日期出处和资料版本；经语义复核后，供带引用的研究使用。核心是一份 Python 包，既可从 CLI 运行，也可由 Codex/Hermes 的七个 Skill 调用；工作台用于只读查询与任务观察。
+本项目从财政部政策发布和国家税务总局政策法规库获取公开资料，保存原始证据、日期出处和资料版本；经语义复核后，供带引用的研究使用。核心是一份 Python 包，既可从 CLI 运行，也可由 Codex/Hermes 的八个 Skill 调用；工作台用于只读查询与任务观察。
 
 ## 最简使用：一句话开始采集
 
@@ -66,7 +66,7 @@ setup 自动准备用户级 uv、Python 3.13 和锁定依赖，优先复用可�
 
 用户提供明确来源与起止日期后，AI 用运行入口执行有界采集，例如 `sh scripts/run.sh collect --sources mof --date-from 2026-09-01 --date-to 2026-09-28 --max-pages 1 --max-documents 2`。达到预算或中断后报告 `PARTIAL`、剩余队列与续跑入口，由用户要求续跑。进度写 stderr，最终结果保持 JSON。查询使用 `workbench` Skill；研究仍要求资料经复核。
 
-开发与 Linux Xvfb 入口、局域网监听和独立 wheel 安装见[安装部署](docs/guides/installation.md)。七个 Skill 为 controller、setup、workbench、semantic-review、research、repair、change-review；受限自修复见[本机规则修复](docs/guides/self-repair.md)。
+开发与 Linux Xvfb 入口、局域网监听和独立 wheel 安装见[安装部署](docs/guides/installation.md)。八个 Skill 为 controller、setup、workbench、semantic-review、research、repair、change-review、knowledge-wiki；受限自修复见[本机规则修复](docs/guides/self-repair.md)。
 
 ## 能力与边界
 
@@ -82,7 +82,7 @@ setup 自动准备用户级 uv、Python 3.13 和锁定依赖，优先复用可�
 
 ## 版本变更
 
-当前版本为 `0.1.1`；变更与升级边界见 [CHANGELOG](CHANGELOG.md)，验证证据见验收记录及 GitHub Actions。
+当前版本为 `0.1.2`；变更与升级边界见 [CHANGELOG](CHANGELOG.md)，验证证据见验收记录及 GitHub Actions。
 
 ## 许可证
 
@@ -123,3 +123,7 @@ Agent 可只读调用 `task list`、`task report --task ID` 和 `task missing --
 ## 项目代码更新提醒
 
 启动采集或工作台时默认检查官方 main，有更新时提醒并继续；工作台顶部显示版本状态。手动入口 `sh scripts/run.sh update check`（Windows 使用 run.ps1），`--force` 重新检查；离线可关闭。ZIP 缺提交身份时明确无法确认。详见[更新检测](docs/guides/update-check.md)。
+
+## 知识加工与领域 Wiki（2026-10-22）
+
+工作台新增“知识与 Wiki”入口：已复核正文/附件 → 知识候选 → AI 预审 → 人工确认启用 → 跨资料专题 → 人工发布 → 来源变化核查。支持 Codex/Hermes 任务包与可选 OpenAI 兼容 API；首个可编辑导航为企业所得税优惠。加工任务完成、人工审核和正式发布分别展示。操作、迁移、API 配置与边界见 [知识与 Wiki 指南](docs/guides/knowledge-wiki.md)。新增第八个 Skill `knowledge-wiki`；数据库 v5，兼容早期库迁移，只读入口不升级。

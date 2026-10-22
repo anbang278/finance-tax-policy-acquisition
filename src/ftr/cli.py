@@ -117,6 +117,9 @@ def parser() -> argparse.ArgumentParser:
     update.add_parser("check", help="检查更新，默认使用缓存").add_argument(
         "--force", action="store_true", help="绕过缓存重新检查 GitHub"
     )
+    from ftr.knowledge.cli import add_parsers
+
+    add_parsers(commands)
     commands.add_parser("schema")
     scheduler = commands.add_parser(
         "scheduler", help="持续回看、定时采集与自动补漏（默认关闭）"
@@ -148,6 +151,10 @@ def run(args: argparse.Namespace) -> OperationResponse:
         }
     settings = load_settings(getattr(args, "config", None), overrides=overrides)
     root = settings.data_dir
+    if args.command in ("knowledge", "wiki"):
+        from ftr.knowledge.cli import run as knowledge_run
+
+        return knowledge_run(args, settings)
     effective_proxy = resolve_proxy(settings.network)
     from ftr.update_check import check_for_updates, emit_notice
 
@@ -298,6 +305,9 @@ def run(args: argparse.Namespace) -> OperationResponse:
             data={
                 "task_request": TaskRequest.model_json_schema(),
                 "runtime_settings": RuntimeSettings.model_json_schema(),
+                "knowledge_result": __import__(
+                    "ftr.knowledge.models", fromlist=["ProcessingResult"]
+                ).ProcessingResult.model_json_schema(),
                 "semantic_decision": SemanticDecision.model_json_schema(),
                 "research_draft": ResearchDraft.model_json_schema(),
                 "extraction_rules": __import__(
@@ -622,7 +632,7 @@ def main() -> None:
             status="FAILED",
             errors=[
                 {
-                    "code": "INPUT_ERROR",
+                    "code": getattr(exc, "code", "INPUT_ERROR"),
                     "message": safe_message(exc),
                     "retryable": False,
                     "next_step": "Agent 检查输入和所选资料目录；需要补充或纠正来源/日期时简短澄清，不自动扩大范围。",
