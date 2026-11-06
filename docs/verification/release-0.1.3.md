@@ -27,4 +27,6 @@
 
 ## 远程CI发现与修复（2026-11-07）
 
-首轮PR检查[42246625709](https://github.com/anbang278/finance-tax-policy-acquisition/actions/runs/42246625709)在Ubuntu的390px Wiki流程失败：旧详情响应覆盖新选择，导致上传框消失。同提交的push三平台检查全部通过，说明存在时序敏感性。新增六种受控延迟用例先复现失败，覆盖条目/任务双向切换、旧详情/旧概览响应，以及新选择仍加载时再次刷新；修复为独立选择目标和选择版本校验，并使旧刷新不再打开过期详情。修复后知识专项54 passed，独立复跑六种竞态及桌面/390px原流程8 passed；整仓完整Chromium为536 passed、1 skipped、1 warning（86.36秒），静态检查通过。最终远端结果随发布制品记录，首轮失败保留。
+首轮PR检查[42246625709](https://github.com/anbang278/finance-tax-policy-acquisition/actions/runs/42246625709)在Ubuntu的390px Wiki流程失败：旧详情响应覆盖新选择，导致上传框消失。同提交的push三平台作业曾呈绿色，但后续日志审计发现Windows状态不能计为测试通过（见下文）；Ubuntu另一次通过说明存在时序敏感性。新增六种受控延迟用例先复现失败，覆盖条目/任务双向切换、旧详情/旧概览响应，以及新选择仍加载时再次刷新；修复为独立选择目标和选择版本校验，并使旧刷新不再打开过期详情。修复后知识专项54 passed，独立复跑六种竞态及桌面/390px原流程8 passed；整仓完整Chromium为536 passed、1 skipped、1 warning（86.36秒），静态检查通过。最终远端结果随发布制品记录，首轮失败保留。
+
+日志审计进一步发现[42249173777](https://github.com/anbang278/finance-tax-policy-acquisition/actions/runs/42249173777)的Windows作业显示success，但pytest实际为15 failed、517 passed、5 skipped：Git自动转换自编HTML为CRLF，导致15个来源的样本SHA-256不符；同一步骤后的成功命令覆盖了PowerShell退出码。新增精确`.gitattributes`将样本固定LF，临时Git仓在`core.autocrlf=true`下复现无属性0/15匹配、加属性15/15匹配，原哈希断言保持。CI的依赖、测试、静态检查、构建和独立安装命令拆成独立步骤，任一步失败即停止该平台。最终验收逐平台读取测试总结与步骤状态，不只依据作业绿色标识。

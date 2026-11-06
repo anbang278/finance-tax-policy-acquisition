@@ -37,7 +37,7 @@ packages = ["src/ftr"]
 [tool.hatch.build.targets.sdist]
 include = [
     "/src", "/tests", "/scripts", "/config", "/contracts", "/skills",
-    "/.github", "/.codex-plugin", "/pyproject.toml", "/uv.lock", "/plugin.json",
+    "/.github", "/.gitattributes", "/.codex-plugin", "/pyproject.toml", "/uv.lock", "/plugin.json",
     "/hatch_build.py", "/ftr.example.yaml", "/*.md", "/LICENSE",
     "/docs/README.md", "/docs/guides", "/docs/development", "/docs/history",
     "/docs/verification/*.md",
