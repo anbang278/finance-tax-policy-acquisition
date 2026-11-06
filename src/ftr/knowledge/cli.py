@@ -73,6 +73,7 @@ def add_parsers(commands):
             p.add_argument("--version", required=action == "diff")
         if action == "export":
             p.add_argument("--output", type=Path, required=True)
+            p.add_argument("--preview", action="store_true", help="导出有审核标识的候选预览")
 
 
 def run(args, settings):
@@ -170,7 +171,7 @@ def run(args, settings):
             elif action == "diff":
                 result = k.diff(args.id, args.version)
             elif action == "export":
-                text = k.export(args.id, args.version)
+                text = k.export(args.id, args.version, preview=args.preview)
                 args.output.write_text(text, encoding="utf-8")
                 result = {"output": str(args.output.resolve())}
     if op:

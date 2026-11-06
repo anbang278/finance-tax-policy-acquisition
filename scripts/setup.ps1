@@ -1,4 +1,4 @@
-param([ValidateSet('mof','chinatax','workbench','all')][string]$Capability='all')
+param([ValidatePattern('^[a-z0-9_,]+$')][string]$Capability='all')
 $ErrorActionPreference = 'Stop'
 $ftrPreviousPythonHome = $env:PYTHONHOME
 $ftrPreviousPythonPath = $env:PYTHONPATH

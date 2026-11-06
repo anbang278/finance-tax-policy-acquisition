@@ -5,13 +5,14 @@ import sqlite3
 from datetime import date
 from functools import wraps
 
-from ftr.knowledge.indexing import check_anchor, encoded, fingerprint
+from ftr.knowledge.indexing import check_anchor, content_anchors, encoded, fingerprint
 from ftr.knowledge.models import (
     ItemContent,
     JobRequest,
     KnowledgeError,
     PageContent,
     ProcessingResult,
+    applicable_at,
 )
 from ftr.models import new_id, utc_now
 
@@ -43,6 +44,15 @@ def atomic(fn):
 
 def now():
     return utc_now().isoformat()
+
+
+def result_digests(result):
+    payload = result.model_dump(mode="json", exclude={"submission_key"})
+    values = [fingerprint(payload)]
+    if not payload.get("checks"):
+        payload.pop("checks", None)
+        values.insert(0, fingerprint(payload))
+    return values
 
 
 def material(record):
@@ -312,6 +322,11 @@ class Knowledge:
             return "blocked"
         seen.add(version_id)
         states = []
+        if self.db.execute(
+            "SELECT 1 FROM kw_impacts WHERE version_id=? AND reason='legal_relation_candidate' AND state IN ('pending','claimed')",
+            (version_id,),
+        ).fetchone():
+            states.append("needs_review")
         for d in self.db.execute("SELECT * FROM kw_dependencies WHERE version_id=?", (version_id,)):
             if d["kind"] == "record":
                 states.append(self.source_state(d["target_id"]))
@@ -350,6 +365,18 @@ class Knowledge:
         ).fetchone()
         return bool(row and row[0] == "approved")
 
+    def preview_usable(self, version_id):
+        version = self.version(version_id)
+        if self.object(version["object_id"])["kind"] != "item":
+            return False
+        review = self.db.execute(
+            "SELECT decision FROM kw_reviews WHERE version_id=? AND actor='human' ORDER BY rowid DESC LIMIT 1",
+            (version_id,),
+        ).fetchone()
+        return (not review or review[0] not in ("rejected", "withdrawn")) and self.dependency(
+            version_id
+        ) == "checked"
+
     def detail(self, id):
         o = self.object(id)
         vs = [
@@ -367,6 +394,13 @@ class Knowledge:
             if selected
             else None
         )
+        preview_available = False
+        if selected:
+            try:
+                self.validate_content(o["kind"], self.version(selected)["content"], preview=True)
+                preview_available = True
+            except (ValueError, KeyError):
+                pass
         return {
             **o,
             "versions": vs,
@@ -377,6 +411,7 @@ class Knowledge:
                 and self.dependency(o["current_version"]) == "checked"
             ),
             "dependency_state": self.dependency(selected) if selected else "unknown",
+            "preview_available": preview_available,
             "reviews": [
                 r for r in self.listing("reviews") if r["version_id"] in [v["id"] for v in vs]
             ],
@@ -470,19 +505,9 @@ class Knowledge:
                             for sec in c["sections"]
                             for vid in sec["knowledge_versions"]
                         ]
-                        if not all(
-                            x.get("applicability_verified")
-                            and x.get("valid_from")
-                            and x.get("valid_to")
-                            and x["valid_from"] <= as_of <= x["valid_to"]
-                            for x in contents
-                        ):
+                        if not all(applicable_at(x, as_of) for x in contents):
                             continue
-                    if typ == "item" and not c.get("applicability_verified"):
-                        continue
-                    if typ == "item" and not (c.get("valid_from") and c.get("valid_to")):
-                        continue
-                    if typ == "item" and not c["valid_from"] <= as_of <= c["valid_to"]:
+                    if typ == "item" and not applicable_at(c, as_of):
                         continue
             elif any((domain, topic, region, subject, as_of)):
                 continue
@@ -522,10 +547,14 @@ class Knowledge:
             )
         versions = []
         for id in request.knowledge_versions:
-            if not self.approved(id) or self.dependency(id) != "checked":
-                raise KnowledgeError("DEPENDENCY_INVALID", "知识未审核或依赖受限")
-            if self.object(self.version(id)["object_id"])["current_version"] != id:
-                raise KnowledgeError("DEPENDENCY_INVALID", "知识版本不是当前正式版本")
+            if request.output_mode == "preview":
+                if not self.preview_usable(id):
+                    raise KnowledgeError("DEPENDENCY_INVALID", "预览知识已退回或来源受限")
+            else:
+                if not self.approved(id) or self.dependency(id) != "checked":
+                    raise KnowledgeError("DEPENDENCY_INVALID", "知识未审核或依赖受限")
+                if self.object(self.version(id)["object_id"])["current_version"] != id:
+                    raise KnowledgeError("DEPENDENCY_INVALID", "知识版本不是当前正式版本")
             versions.append(self.version(id))
         if job_type in ("extract", "merge") and not ss:
             raise KnowledgeError("EMPTY_INPUT", "缺少已复核资料")
@@ -540,7 +569,7 @@ class Knowledge:
                     version = self.version(vid)
                     if version not in versions:
                         versions.append(version)
-                    for anchor in version["content"]["citations"]:
+                    for anchor in content_anchors(version["content"]):
                         part = json.loads(
                             self.row("kw_segments", anchor["segment_id"])["data_json"]
                         )
@@ -555,8 +584,10 @@ class Knowledge:
                 (target["id"],),
             ):
                 source.append(self.repo.get_document(d[0]).model_dump(mode="json"))
-            for a in target["content"].get("citations", []):
+            for a in content_anchors(target["content"]):
                 ss.append(json.loads(self.row("kw_segments", a["segment_id"])["data_json"]))
+        ss = list({segment["segment_id"]: segment for segment in ss}.values())
+        source = list({record["record_id"]: record for record in source}.values())
         baseline = self.baseline(request.object_id or (target["object_id"] if target else None))
         existing = None
         if baseline:
@@ -576,6 +607,9 @@ class Knowledge:
             "sources": source,
             "segments": ss,
             "knowledge_versions": versions,
+            "knowledge_baselines": {
+                version["id"]: self.baseline(version["object_id"]) for version in versions
+            },
             "target_version": target,
             "baseline": baseline,
             "prompt_version": "1",
@@ -606,6 +640,12 @@ class Knowledge:
             if self.source_state(r["record_id"]) != "checked":
                 raise KnowledgeError("INPUT_STALE", "来源变化或质量资格失效")
         for v in p["knowledge_versions"]:
+            if p["request"].get("output_mode") == "preview":
+                if not self.preview_usable(v["id"]) or (
+                    p.get("knowledge_baselines", {}).get(v["id"]) != self.baseline(v["object_id"])
+                ):
+                    raise KnowledgeError("INPUT_STALE", "预览候选或其来源已变化")
+                continue
             if (
                 not self.approved(v["id"])
                 or self.dependency(v["id"]) != "checked"
@@ -681,23 +721,33 @@ class Knowledge:
         self.db.execute("UPDATE kw_jobs SET state='cancelled' WHERE id=?", (id,))
         return self.job(id)
 
-    def validate_content(self, kind, content, allowed=None):
+    def validate_content(self, kind, content, allowed=None, *, preview=False):
         c = (
             (ItemContent if kind == "item" else PageContent)
             .model_validate(content)
             .model_dump(mode="json")
         )
         if kind == "item":
-            for a in c["citations"]:
+            for a in content_anchors(c):
                 check_anchor(self.repo, a, allowed=allowed)
+            for relation in c["legal_relations"]:
+                if allowed is not None:
+                    input_records = {
+                        json.loads(self.row("kw_segments", segment)["data_json"])["record_id"]
+                        for segment in allowed
+                    }
+                    if relation["target_record_id"] not in input_records:
+                        raise KnowledgeError("CITATION_NOT_IN_INPUT", "关系目标超出冻结输入")
+                if self.source_state(relation["target_record_id"]) != "checked":
+                    raise KnowledgeError("DEPENDENCY_INVALID", "关系目标资料尚不可用")
         else:
             for s in c["sections"]:
                 for id in s["knowledge_versions"]:
                     v = self.version(id)
-                    if (
-                        self.object(v["object_id"])["kind"] != "item"
-                        or not self.approved(id)
-                        or self.dependency(id) != "checked"
+                    if self.object(v["object_id"])["kind"] != "item" or (
+                        not self.preview_usable(id)
+                        if preview
+                        else not self.approved(id) or self.dependency(id) != "checked"
                     ):
                         raise KnowledgeError("DEPENDENCY_INVALID", "页面引用非正式或受限知识")
         return c
@@ -729,10 +779,15 @@ class Knowledge:
             ),
         )
         if kind == "item":
-            for a in content["citations"]:
+            for a in content_anchors(content):
                 self.db.execute(
                     "INSERT OR IGNORE INTO kw_dependencies VALUES(?,?,?,?)",
                     (version, a["record_id"], "record", ""),
+                )
+            for relation in content.get("legal_relations", []):
+                self.db.execute(
+                    "INSERT OR IGNORE INTO kw_dependencies VALUES(?,?,?,?)",
+                    (version, relation["target_record_id"], "record", relation["scope"]),
                 )
         else:
             for s in content["sections"]:
@@ -741,19 +796,60 @@ class Knowledge:
                         "INSERT OR IGNORE INTO kw_dependencies VALUES(?,?,?,?)",
                         (version, kv, "knowledge", s["section_id"]),
                     )
+        if kind == "item":
+            self.record_relation_impacts(version, content)
         return version
+
+    def record_relation_impacts(self, candidate_version, content):
+        for relation in content.get("legal_relations", []):
+            target = self.repo.get_document(relation["target_record_id"])
+            related = self.db.execute(
+                "SELECT DISTINCT d.version_id FROM kw_dependencies d JOIN kw_objects o ON o.current_version=d.version_id "
+                "WHERE d.kind='record' AND d.target_id IN "
+                "(SELECT id FROM documents WHERE source_id=? AND canonical_url=?)",
+                (target.source_id, target.canonical_url),
+            ).fetchall()
+            pending = [row[0] for row in related if row[0] != candidate_version]
+            seen = set()
+            while pending:
+                affected = pending.pop()
+                if affected in seen or affected == candidate_version:
+                    continue
+                seen.add(affected)
+                data = {
+                    "candidate_version": candidate_version,
+                    "relation": relation,
+                    "requires_human_resolution": True,
+                }
+                self.db.execute(
+                    "INSERT OR IGNORE INTO kw_impacts(id,source_id,version_id,reason,state,data_json,created_at) VALUES(?,?,?,'legal_relation_candidate','pending',?,?)",
+                    (
+                        fingerprint([candidate_version, affected, relation]),
+                        relation["citations"][0]["record_id"],
+                        affected,
+                        encoded(data),
+                        now(),
+                    ),
+                )
+                pending.extend(
+                    row[0]
+                    for row in self.db.execute(
+                        "SELECT version_id FROM kw_dependencies WHERE kind='knowledge' AND target_id=?",
+                        (affected,),
+                    )
+                )
 
     def submit(self, value):
         r = ProcessingResult.model_validate(value)
         j = self.job(r.job_id)
-        payload = r.model_dump(mode="json")
-        dig = fingerprint({key: value for key, value in payload.items() if key != "submission_key"})
+        compatible_digests = result_digests(r)
+        dig = compatible_digests[0]
         previous = self.db.execute(
             "SELECT * FROM kw_submissions WHERE attempt_id=? AND submission_key=?",
             (r.attempt_id, r.submission_key),
         ).fetchone()
         if previous:
-            if previous["result_digest"] != dig:
+            if previous["result_digest"] not in compatible_digests:
                 raise KnowledgeError("IDEMPOTENCY_CONFLICT", "同一提交键内容不同")
             if previous["accepted"]:
                 return json.loads(previous["result_json"])
@@ -762,7 +858,7 @@ class Knowledge:
             "SELECT result_digest,result_json FROM kw_submissions WHERE attempt_id=? AND accepted=1",
             (r.attempt_id,),
         ).fetchone()
-        if accepted and accepted["result_digest"] == dig:
+        if accepted and accepted["result_digest"] in compatible_digests:
             return json.loads(accepted["result_json"])
         try:
             return self._accept(r, j, dig)
@@ -807,10 +903,28 @@ class Knowledge:
             if r.outputs:
                 raise KnowledgeError("INVALID_RESULT", "预审仅回传问题，不修改候选")
             target = p["target_version"]
+            statements = [target["content"].get("statement", "")]
+            statements.extend(s["text"] for s in target["content"].get("sections", []))
+            for check in r.checks:
+                if check.statement not in statements:
+                    raise KnowledgeError("INVALID_RESULT", "预审陈述不属于冻结候选")
+                if check.status != "insufficient" and not check.citations:
+                    raise KnowledgeError("INVALID_RESULT", "支持或冲突检查须提供引用")
+                for anchor in check.citations:
+                    check_anchor(self.repo, anchor.model_dump(), allowed=allowed)
             self.review(
                 target["id"],
                 "precheck",
-                "\n".join(r.findings) or "未报告问题；仍需人工核对",
+                "\n".join(
+                    [
+                        *r.findings,
+                        *[
+                            f"{check.dimension} · {check.status} · {check.statement} · {check.reason}"
+                            for check in r.checks
+                        ],
+                    ]
+                )
+                or "未报告问题；仍需人工核对",
                 actor="ai",
             )
         else:
@@ -827,7 +941,12 @@ class Knowledge:
                     raise KnowledgeError(
                         "HUMAN_CONFIRMATION_REQUIRED", "适用区间的人工核验字段须由人工编辑确认"
                     )
-                c = self.validate_content(output.kind, output.content, allowed=allowed)
+                c = self.validate_content(
+                    output.kind,
+                    output.content,
+                    allowed=allowed,
+                    preview=p["request"].get("output_mode") == "preview",
+                )
                 if output.kind == "page":
                     existing = p.get("existing_content")
                     old = (
@@ -860,7 +979,12 @@ class Knowledge:
                         output.object_id,
                     )
                 )
-        result = {"job_id": r.job_id, "versions": versions, "findings": r.findings}
+        result = {
+            "job_id": r.job_id,
+            "versions": versions,
+            "findings": r.findings,
+            "checks": [check.model_dump(mode="json") for check in r.checks],
+        }
         self.db.execute(
             "INSERT INTO kw_submissions(job_id,attempt_id,submission_key,result_digest,accepted,result_json,created_at) VALUES(?,?,?,?,1,?,?)",
             (r.job_id, r.attempt_id, r.submission_key, dig, encoded(result), now()),
@@ -951,10 +1075,10 @@ class Knowledge:
 
         return Wiki(self).diff(id, candidate)
 
-    def export(self, id, version=None):
+    def export(self, id, version=None, *, preview=False):
         from ftr.knowledge.wiki import Wiki
 
-        return Wiki(self).export(id, version)
+        return Wiki(self).export(id, version, preview=preview)
 
     def item_lines(self, id):
         from ftr.knowledge.wiki import Wiki

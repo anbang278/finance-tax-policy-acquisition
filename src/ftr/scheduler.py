@@ -11,7 +11,6 @@ import threading
 from contextlib import closing
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
-from typing import Literal
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -22,9 +21,17 @@ from ftr.diagnostics import recover_interrupted, safe_message, task_report
 from ftr.models import TaskRequest
 from ftr.repository import Repository
 from ftr.runtime import Collector, data_lock
+from ftr.schedule_plan import (
+    LEGACY_SOURCE_IDS,
+    SchedulePlan,
+    ScheduleScope,
+    legacy_scope,
+    merge_pending,
+)
 
-SourceId = Literal["mof", "chinatax"]
-SOURCES: tuple[SourceId, SourceId] = ("mof", "chinatax")
+SourceId = str
+# Backward compatible constant, never expanded to the whole registry.
+SOURCES = LEGACY_SOURCE_IDS
 HEARTBEAT_SECONDS = 15
 HEARTBEAT_STALE_SECONDS = 90
 
@@ -70,7 +77,9 @@ def window(at: datetime, settings: SchedulerSettings) -> dict:
     }
 
 
-def preview(settings: SchedulerSettings, now: datetime | None = None) -> dict:
+def preview(settings: SchedulerSettings | SchedulePlan, now: datetime | None = None) -> dict:
+    scope = settings.scope if isinstance(settings, SchedulePlan) else legacy_scope()
+    settings = settings.settings if isinstance(settings, SchedulePlan) else settings
     now = now or datetime.now(UTC)
     following = next_slot(now, settings)
     upcoming = []
@@ -84,7 +93,8 @@ def preview(settings: SchedulerSettings, now: datetime | None = None) -> dict:
         "next_run_at": following.isoformat() if settings.enabled else None,
         "next_window": window(following, settings),
         "startup_window": window(now, settings),
-        "sources": list(SOURCES),
+        "sources": scope.source_ids,
+        "scope": scope.model_dump(),
     }
 
 
@@ -176,6 +186,7 @@ def status(
     from ftr.management import effective_plan
 
     persisted = effective_plan(root, settings)
+    result["scope"] = persisted["scope"]
     if persisted["revision"]:
         config = SchedulerSettings.model_validate(persisted["settings"])
         result.update({k: v for k, v in preview(config, now).items() if k != "sources"})
@@ -221,6 +232,9 @@ class Scheduler:
         self.settings = settings
         self.root = settings.data_dir
         self.config = settings.scheduler
+        self.scope = legacy_scope()
+        self.source_snapshot: dict = {}
+        self.plan_revision = 0
         self.collector_factory = collector_factory
         self.stop = stop_event if stop_event is not None else threading.Event()
         self.activity: dict = {"state": "STARTING"}
@@ -244,18 +258,21 @@ class Scheduler:
             and meta["config_json"] == self.config.model_dump_json()
         ):
             return states
-        for source in SOURCES:
+        for source in self.scope.source_ids:
             state = states.setdefault(source, initial_state())
+            state["scope_removed"] = False
             if due:
-                pending = state["pending_window"]
-                state["pending_window"] = (
+                from ftr.sources import source_snapshot
+
+                frozen = self.source_snapshot or source_snapshot(self.scope.source_ids)
+                state["pending_window"] = merge_pending(
+                    state["pending_window"],
                     {
                         **due,
-                        "date_from": min(due["date_from"], pending["date_from"]),
-                        "date_to": max(due["date_to"], pending["date_to"]),
-                    }
-                    if pending
-                    else dict(due)
+                        "source_snapshot": {source: frozen[source]},
+                        "plan_revision": self.plan_revision,
+                        "scope_origin": "schedule",
+                    },
                 )
             repo.db.execute(
                 "INSERT OR REPLACE INTO scheduler_sources VALUES(?,?)",
@@ -309,6 +326,9 @@ class Scheduler:
 
                 persisted = effective_plan(self.root, self.config)
                 self.config = SchedulerSettings.model_validate(persisted["settings"])
+                self.scope = ScheduleScope.model_validate(persisted["scope"])
+                self.source_snapshot = persisted.get("source_snapshot", {})
+                self.plan_revision = persisted.get("revision", 0)
                 self.settings = self.settings.model_copy(update={"scheduler": self.config})
                 states = self._plan(repo, now) if self.config.enabled else read_states(repo.db)
                 if not states:
@@ -321,11 +341,19 @@ class Scheduler:
                 meta = repo.db.execute(
                     "SELECT last_source FROM scheduler_meta WHERE id=1"
                 ).fetchone()
-                order = list(SOURCES)
-                if meta[0] == order[0]:
-                    order.reverse()
+                order = list(self.scope.source_ids) if self.config.enabled else []
+                order.extend(
+                    source
+                    for source, state in states.items()
+                    if state.get("explicit_run") and source not in order
+                )
+                if meta[0] in order:
+                    cursor = order.index(meta[0]) + 1
+                    order = order[cursor:] + order[:cursor]
                 for source in order:
                     state = states.get(source, initial_state())
+                    if state.get("scope_removed") and not state.get("explicit_run"):
+                        continue
                     if not self.config.enabled and not state.get("explicit_run"):
                         continue
                     if state["paused_reason"] or state.get("user_paused"):
@@ -341,7 +369,19 @@ class Scheduler:
                         or state["pending_window"]
                     ):
                         continue
-                    self._batch(repo, source, state, now)
+                    try:
+                        self._batch(repo, source, state, now)
+                    except (ValueError, KeyError) as exc:
+                        # Frozen request/host validation can fail before collector startup.
+                        # Pause only this source and retain its prepared request.
+                        state["paused_reason"] = "EXECUTION_ERROR"
+                        state["management_revision"] = state.get("management_revision", 0) + 1
+                        state["last_result"] = {
+                            "at": now.isoformat(),
+                            "status": "FAILED",
+                            "message": safe_message(exc),
+                        }
+                        save_state(repo.db, source, state)
                     repo.db.execute("UPDATE scheduler_meta SET last_source=? WHERE id=1", (source,))
                     repo.db.commit()
                     self.activity = {"state": "IDLE", "last_source": source}
@@ -357,6 +397,7 @@ class Scheduler:
                 pending = state["pending_window"]
                 request = TaskRequest(
                     source_ids=[source],
+                    source_snapshot=pending.get("source_snapshot", {}),
                     date_from=pending["date_from"],
                     date_to=pending["date_to"],
                     mode="rescan",
@@ -369,7 +410,9 @@ class Scheduler:
                 state["pending_window"] = None
                 save_state(repo.db, source, state)
             # A crash after create_task commits reuses exactly this saved request and key.
-            task_id = repo.create_task(TaskRequest.model_validate(state["prepared_request"]))
+            task_id = repo.create_task(
+                TaskRequest.model_validate(state["prepared_request"]), trusted_snapshot=True
+            )
             state["active_task_id"] = task_id
             save_state(repo.db, source, state)
         task_id = state["active_task_id"]
@@ -462,7 +505,10 @@ class Scheduler:
 
 
 def resume_source(root: Path, source: str) -> dict:
-    if source not in SOURCES or not (root / "database.sqlite3").is_file():
+    from ftr.sources import validate_source_ids
+
+    validate_source_ids([source])
+    if not (root / "database.sqlite3").is_file():
         raise ValueError("该来源尚无定时计划")
     with closing(Repository(root, readonly=True)) as reader:
         if not reader.db.execute(

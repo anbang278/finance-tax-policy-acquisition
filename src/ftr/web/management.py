@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
-from ftr.config import RuntimeSettings, SchedulerSettings
+from ftr.config import RuntimeSettings
 from ftr.management import (
     Command,
     Conflict,
@@ -110,10 +110,20 @@ def install(app, root: Path, settings: RuntimeSettings, session: ManagementSessi
     async def plan_preview(request: Request):
         authorize(request)
         try:
-            value = SchedulerSettings.model_validate(await request.json())
+            from ftr.schedule_plan import parse_plan_payload
+
+            value = parse_plan_payload(await request.json())
         except (ValidationError, ValueError) as exc:
             raise HTTPException(422, "计划参数无效") from exc
-        return response(**preview(value))
+        from ftr.sources import snapshot_digest, source_snapshot
+
+        frozen = source_snapshot(value.scope.source_ids)
+        return response(
+            **preview(value),
+            source_snapshot=frozen,
+            scope_digest=snapshot_digest(frozen),
+            budget=settings.collection.model_dump(mode="json"),
+        )
 
     @app.get("/api/manage/operations")
     def operation_status():

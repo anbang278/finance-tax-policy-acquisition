@@ -16,7 +16,7 @@ trap ftr_cleanup EXIT
 trap 'exit 130' HUP INT TERM
 ftr_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 ftr_capability=${1:-all}
-case "$ftr_capability" in mof|chinatax|workbench|all) ;; *) echo '能力须为 mof/chinatax/workbench/all' >&2; exit 2 ;; esac
+case "$ftr_capability" in *[!a-z0-9_,]*|'') echo '能力须为登记来源ID（逗号分隔）或 workbench/all' >&2; exit 2 ;; esac
 ftr_uv=$(command -v uv || true)
 if [ -z "$ftr_uv" ] && [ -x "$HOME/.local/share/ftr/bootstrap/bin/uv" ]; then
   ftr_uv="$HOME/.local/share/ftr/bootstrap/bin/uv"

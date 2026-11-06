@@ -33,3 +33,6 @@ label.check input{width:auto!important}.review-filter{padding:10px 0}.review-fil
 .update-notice { margin: 12px 24px 0; padding: 10px 14px; background: #fff5dc; color: #644b14; border: 1px solid #e7d5a7; border-radius: 8px; overflow-wrap: anywhere; font-size: 13px; }
 .update-version { color: #64748b; font-size: 12px; overflow-wrap: anywhere; }
 @media (max-width: 600px) { .update-version { max-width: 100px; font-size: 10px; } .update-notice { margin: 8px 12px 0; } }
+
+/* Source catalog: retain usable forms on narrow screens. */
+#source-catalog-filters {display:flex;flex-wrap:wrap;gap:12px;padding:16px 0} #source-catalog-filters > input,#source-catalog-filters > select {max-width:100%;min-width:0} #source-catalog-filters label {display:flex;flex-direction:column;gap:4px} #source-catalog-filters input[type=number] {width:100px} #source-scope-preview {width:100%;overflow-wrap:anywhere} #sources-content .source-card {overflow-wrap:anywhere} #sources-content .check {font-weight:600} @media(max-width:600px){#source-catalog-filters > input,#source-catalog-filters > select {width:100%} #source-catalog-filters .filter-row {flex-wrap:wrap} #sources-dialog {max-width:calc(100vw - 24px)}}

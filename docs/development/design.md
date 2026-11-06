@@ -126,3 +126,30 @@ CLI update check 用 OperationResponse.data；状态为 UP_TO_DATE/UPDATE_AVAILA
 任务冻结资料、片段、知识、专题模板与人工基线。每次尝试独立；无结果等待，非法结果可纠正，同键异文拒绝，旧输入 stale；API 配置单独冻结，密钥仅在执行环境。模型调用由跨进程锁限制并发，网络期间无业务锁；输出内容寻址落盘后入持久命令队列，进程重启先回放已保存输出，未确认远端结果标 uncertain。
 
 默认 HTTP 只读，受保护 upload 最大 4 MiB，不接受服务器路径；CLI 与 Web 共用白名单命令、校验、审核和发布服务。检索分资料/知识/Wiki，正式读取实时复核依赖；未知适用区间不视为日期匹配。专题模板变化与来源、资格、知识版本、日期核查进入持久影响队列。
+
+## 企业所得税专题研究闭环（2026-11-06）
+
+TaskRequest增加targeted模式及OfficialTarget清单，CLI新增--urls-file。输入先校验来源和HTTPS主机，建任务时原子冻结discovered队列与范围。详情沿Collector取得原件、解析、附件与恢复路径；预期文号与原文不匹配进入limitations。policy_records在schema v6增量建立，映射policy_key与record_id，文号规范化区分机关/系列、年和序号，未知身份按来源记录保留。
+
+ItemContent增加TemporalBasis、LegalRelation和valid_to_kind，所有新增Anchor纳入校验、预审输入与依赖。知识关系候选定位正式知识及上游章节，pending/claimed持续标记待核。revision_published要求新版本已正式发布且可用，并通过递归依赖确认变化来源。
+
+JobRequest.output_mode预览模式冻结候选及人工基线，正式发布检查当前审核与依赖。ProcessingResult.checks保存四维预审，旧空checks摘要兼容重放。ResearchDraft.context区分时点和业务事实，预审摘要覆盖背景、陈述与依据。旧正文引用从已保存原件派生唯一锚点，同样检查来源新版本与内容限制。报告预览端点经本人会话授权，线程池执行只读证据检查。
+
+更详细的接口使用见[专题研究指南](../guides/topic-research.md)。
+
+
+## 来源目录、冻结范围与多来源执行（2026-11-06）
+
+`config/sources.yaml`是工程受控信任表，`SourceConfig`按具体栏目保存稳定 ID、机构、站点地区、六类标签、真实入口、精确允许主机、日期语义、适配器、受限 profile 和验证说明。`config/pending-sources.yaml`保留 36 局栏目矩阵的未定位/未接入项。`sources.catalog_entries()`合并展示状态；未进入信任表的目录项不能成为 `TaskRequest`来源，展示范围不等于采集范围。
+
+`sources.source_snapshot()`生成每来源 `{config,digest}`；新请求写入不可变 `request_json`，由 Repository 验证并冻结。外部请求不能任意指定旧配置或扩大主机；可信内部调度沿已保存快照生成请求。`resolve_source()`使用冻结入口、日期语义和 profile，并与当前允许主机取交集；撤销信任时停止对应来源。旧请求读取和幂等比较保持历史序列化与摘要，不重写旧正文和复核记录。
+
+`PublicAdapter`提供声明式 HTML/正常浏览器家族，profile 分列表、分页、详情和浏览器等待/iframe 定位。规则只使用受限选择器和明确分页依据；缺容器、异常壳页、软 404 与有证据空列表分别处理。浏览器独占上下文并阻断 Service Worker，经精确主机门禁捕获 DOM 与原始导航/公开数据响应，分别存证和建立审计关联。复杂表格保留行列结构；不支持的附件仍保留原件并标注解析限制。
+
+`DocumentRecord`区分 `source_publisher`、`issuing_authorities`、`applicable_regions`、`content_stage`与 `categories`；站点地区不能推断法律适用地区。官方问答、解读与规范文件分别表达，类别和状态的提取仍需语义复核。
+
+`Collector`按任务来源惰性加载规则和适配器，单来源失败保留检查点与失败事实；客户端在同一采集器内共享主机请求时点。每来源预算与整批页数、资料数、字节预算同时检查，列表/正文、补附件以及另存的浏览器原始响应共同受约束；日期排除前已取得的正文也计量。
+
+新计划模型为 `SchedulePlan(schema_version="2",settings=SchedulerSettings,scope=ScheduleScope)`，业务来源不进入普通运行参数。管理入队单文件封装原 `Command`与服务器生成 context，冻结来源快照、窗口及计划修订；客户端不能提交内部 context。旧裸命令继续读取，旧扁平保存只更新设置并保留 scope。每来源 pending/prepared 请求保留冻结范围，移出来源停止自动续跑但不删除状态；`scheduler_meta.last_source`作持久游标循环，避免三来源以上饥饿。
+
+SQLite v7 为 `managed_plan`增加 `scope_json`，旧值固定为 `mof/chinatax`；来源快照保存在任务 JSON 及计划/队列制品中。迁移沿现有单写者、预备份和事务路径执行；Web 继续读取只读快照。受限 Repair 仍不能修改信任表、公共网络/适配器基础设施或复核门禁。

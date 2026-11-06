@@ -35,15 +35,18 @@ YAML 的 `data_dir` 与 `browser.executable_path` 相对路径基于配置文件
 | `network.proxy_mode` | `FTR_NETWORK__PROXY_MODE` | `system` | `system/direct/explicit` |
 | `network.proxy_url` | `FTR_NETWORK__PROXY_URL` | `null` | explicit 必填；HTTP/HTTPS 地址，可带基本认证；其他模式必须为空 |
 | `network.timeout_seconds` | `FTR_NETWORK__TIMEOUT_SECONDS` | `30` | 有限正数；HTTP 与会话请求超时 |
-| `network.interval_seconds` | `FTR_NETWORK__INTERVAL_SECONDS` | `2` | 有限非负数；同来源客户端请求间隔 |
+| `network.interval_seconds` | `FTR_NETWORK__INTERVAL_SECONDS` | `2` | 有限非负数；同一采集器内各来源共享目标主机请求间隔 |
 | `network.max_file_bytes` | `FTR_NETWORK__MAX_FILE_BYTES` | `50000000` | 正整数；正文、列表、附件单响应字节上限 |
 | `browser.headless` | `FTR_BROWSER__HEADLESS` | `false` | 布尔值；不因失败自动切换模式 |
 | `browser.executable_path` | `FTR_BROWSER__EXECUTABLE_PATH` | `null` | 非空路径或空值；空值时自动验证已有 Chromium、Edge、Chrome；显式路径失效不替换 |
 | `browser.timeout_seconds` | `FTR_BROWSER__TIMEOUT_SECONDS` | `30` | 有限正数；浏览器启动、导航及等待列表响应超时 |
-| `collection.max_pages` | `FTR_COLLECTION__MAX_PAGES` | `1000` | 整数 1–1000；CLI `--max-pages` 可覆盖 |
-| `collection.max_documents` | `FTR_COLLECTION__MAX_DOCUMENTS` | `1000` | 整数 1–1000；计新增资料版本，CLI `--max-documents` 可覆盖 |
+| `collection.max_pages` | `FTR_COLLECTION__MAX_PAGES` | `1000` | 整数 1–1000；每来源每批页数，CLI `--max-pages` 可覆盖并冻结进任务 |
+| `collection.max_documents` | `FTR_COLLECTION__MAX_DOCUMENTS` | `1000` | 整数 1–1000；每来源每批新增资料版本，CLI `--max-documents` 可覆盖并冻结进任务 |
 | `collection.max_duration_seconds` | `FTR_COLLECTION__MAX_DURATION_SECONDS` | `1800` | 有限正数；单次执行批次时间预算 |
-| `collection.max_bytes_per_source` | `FTR_COLLECTION__MAX_BYTES_PER_SOURCE` | `500000000` | 正整数；每来源、本次批次的保存正文及附件字节预算 |
+| `collection.max_bytes_per_source` | `FTR_COLLECTION__MAX_BYTES_PER_SOURCE` | `500000000` | 严格正整数；每来源本批列表、正文、附件及另存原始响应的字节预算 |
+| `collection.max_pages_per_batch` | `FTR_COLLECTION__MAX_PAGES_PER_BATCH` | `1000` | 严格正整数；本次执行所有所选来源共享的列表页数预算 |
+| `collection.max_documents_per_batch` | `FTR_COLLECTION__MAX_DOCUMENTS_PER_BATCH` | `1000` | 严格正整数；本次执行所有所选来源共享的新增资料版本预算 |
+| `collection.max_bytes_per_batch` | `FTR_COLLECTION__MAX_BYTES_PER_BATCH` | `500000000` | 严格正整数；本次执行所有所选来源共享的列表、正文、附件及另存原始响应字节预算 |
 | `web.host` | `FTR_WEB__HOST` | `127.0.0.1` | IPv4/IPv6 地址或 localhost；CLI `serve --host` 可覆盖 |
 | `web.port` | `FTR_WEB__PORT` | `8765` | 整数 1–65535；CLI `serve --port` 可覆盖 |
 | `web.poll_interval_ms` | `FTR_WEB__POLL_INTERVAL_MS` | `5000` | 整数，至少 100；可见页面轮询间隔 |
@@ -55,7 +58,7 @@ YAML 的 `data_dir` 与 `browser.executable_path` 相对路径基于配置文件
 | `collection.progress_interval_seconds` | `FTR_COLLECTION__PROGRESS_INTERVAL_SECONDS` | `30` | 有限正数；stderr 定期进度间隔，显示最后检查点，不作为全量进度百分比 |
 | `web.startup_timeout_seconds` | `FTR_WEB__STARTUP_TIMEOUT_SECONDS` | `15` | 有限正数，至多 120；工作台启动总截止时间，区别于页面请求超时 |
 
-数字环境变量用十进制值；布尔值用 `true/false`。路径、地址和代理 URL 按字符串读取；可选 proxy_url/executable_path 的环境变量空字符串表示清除配置值。切换显式代理为 direct/system 时须同时清除继承的 proxy_url。单响应限额与批次预算是不同口径；运行时间按工作检查点评估，正在执行的请求受请求超时控制，并非强制在预算秒数处杀进程。列表原件保存，但现有批次字节计数只统计正文与附件。
+数字环境变量用十进制值；布尔值用 `true/false`。路径、地址和代理 URL 按字符串读取；可选 proxy_url/executable_path 的环境变量空字符串表示清除配置值。切换显式代理为 direct/system 时须同时清除继承的 proxy_url。单响应限额与批次预算是不同口径；运行时间按工作检查点评估，正在执行的请求受请求超时控制，并非强制在预算秒数处杀进程。当前字节路径计入列表、正文、附件及另存的原始导航/公开数据响应；与 DOM 同摘要的原始响应不重复计量。日期排除或解析失败不豁免已取得内容，补附件同样受整批剩余额限制；这不是精确网络总流量封顶。
 
 ## 任务冻结与续跑
 
@@ -127,3 +130,31 @@ web:
 ## processing 模型执行配置（2026-10-22）
 
 模板增加可选 processing 分组，默认 enabled=false。字段和默认值见 ftr.example.yaml；base_url/model 必须显式配置，api_key_env 仅保存环境变量名，密钥本身不入配置。支持响应格式和输出参数名的显式兼容选项；默认 120 秒/8192 tokens/单并发。每任务冻结调用次数及输入大小，超过预算不会截断或自动扩大。完整用法见 [知识与 Wiki](knowledge-wiki.md)。
+
+
+## 来源范围、计划 scope 与整批预算（2026-11-06）
+
+来源目录及受控入口见[来源目录指南](source-catalog.md)。`source_ids`、起止日期与日期依据属于 `TaskRequest`；来源身份、允许主机和解析 profile 属于工程信任表。它们不新增为 `RuntimeSettings`环境开关。新任务的 `source_snapshot`由受信登记生成；网页/CLI 预览可返回完整冻结请求，外部修改或使用过期快照时重新预览。
+
+新日常计划将运行设置与业务来源分开：
+
+```json
+{
+  "schema_version": "2",
+  "settings": {
+    "enabled": false,
+    "timezone": "Asia/Shanghai",
+    "times": ["09:00", "18:00"],
+    "lookback_days": 30,
+    "batch_interval_seconds": 60,
+    "retry_delays_seconds": [300, 900, 3600]
+  },
+  "scope": {"source_ids": ["mof", "chinatax"]}
+}
+```
+
+`scope.source_ids`必须显式、非空、不重复且已经登记；不从目录全集推导。旧 YAML 启用配置与缺 scope 的旧计划固定解析为原两个来源；旧扁平设置编辑保留已有 scope。`plan.enable/disable`不重新选源，目录导入不修改日常计划。管理队列在提交时冻结本轮窗口、来源快照与计划修订；已排队操作和活动任务不随之后的登记变化而扩大。
+
+每来源 `max_pages/max_documents`冻结进任务，续跑继续沿用；三个 `*_per_batch`参数与执行时长、字节、网络参数在每次执行采用当前运行配置，并写脱敏运行审计。多个来源同批执行时，总预算不会按来源数量相乘。达到任一适用预算就保留检查点并报告部分完成；手动采集仍等待用户要求继续，已授权定时范围内的续跑按原约定处理。
+
+SQLite 当前增量为 v7：明确写入前备份并事务新增 `managed_plan.scope_json`，旧计划默认原两来源；普通查询和工作台只读快照不迁移。旧程序回退须在新目录恢复升级前备份。setup可按单个/逗号分隔登记 ID 准备所需浏览器，`all`保留原两来源与工作台含义；本轮文档和配置示例不启用定时服务。

@@ -37,7 +37,7 @@ class Blob(StrictModel):
 
 class Impact(Identity):
     topic_id: str
-    resolution: Literal["create_job", "no_impact"] = "create_job"
+    resolution: Literal["create_job", "no_impact", "revision_published"] = "create_job"
     reason: str = Field(min_length=1)
 
 
@@ -178,8 +178,43 @@ def dispatch(repo, payload, settings, prepared_index=None):
         return k.scan()
     if name == "impact.resolve":
         impact = k.row("kw_impacts", a["id"])
-        if impact["state"] != "pending":
+        if impact["state"] not in ("pending", "claimed"):
             return {"state": impact["state"]}
+        if impact["state"] == "claimed" and a["resolution"] == "create_job":
+            return {"state": impact["state"]}
+        if a["resolution"] == "revision_published":
+            if not impact["version_id"]:
+                raise KnowledgeError("RESOLUTION_INVALID", "此变化尚未关联已修订对象")
+            previous = k.version(impact["version_id"])
+            current = k.object(previous["object_id"])["current_version"]
+            if (
+                not current
+                or current == previous["id"]
+                or not k.approved(current)
+                or k.dependency(current) != "checked"
+            ):
+                raise KnowledgeError("RESOLUTION_INVALID", "需要可用且已审核发布的新版本")
+            source_is_record = repo.db.execute(
+                "SELECT 1 FROM documents WHERE id=?", (impact["source_id"],)
+            ).fetchone()
+            if source_is_record:
+                sources = {
+                    row[0]
+                    for row in repo.db.execute(
+                        "WITH RECURSIVE linked(id) AS (SELECT ? UNION SELECT d.target_id FROM kw_dependencies d JOIN linked ON d.version_id=linked.id WHERE d.kind='knowledge') "
+                        "SELECT target_id FROM kw_dependencies WHERE kind='record' AND version_id IN (SELECT id FROM linked)",
+                        (current,),
+                    )
+                }
+                if impact["source_id"] not in sources:
+                    raise KnowledgeError("RESOLUTION_INVALID", "新版本尚未引用本次变化来源")
+            repo.db.execute("UPDATE kw_impacts SET state='resolved' WHERE id=?", (a["id"],))
+            repo.audit(
+                None,
+                "impact_revision_resolved",
+                {"impact_id": a["id"], "version_id": current, "reason": a["reason"]},
+            )
+            return {"state": "resolved", "version_id": current}
         job = None
         if a["resolution"] == "create_job":
             if impact["version_id"]:
@@ -210,6 +245,9 @@ def dispatch(repo, payload, settings, prepared_index=None):
                         ).fetchone()[0]
                         for r in refs
                     ]
+                    if impact["reason"] == "legal_relation_candidate":
+                        latest.append(impact["source_id"])
+                    latest = list(dict.fromkeys(latest))
                     job = k.create_job("extract", a["topic_id"], latest, object_id=o["id"])
             else:
                 job = k.create_job("extract", a["topic_id"], [impact["source_id"]])
@@ -227,7 +265,7 @@ def dispatch(repo, payload, settings, prepared_index=None):
 
 def record_rejection(repo, payload, error):
     """Persist rejected identities after the enclosing command transaction rolls back."""
-    from ftr.knowledge.indexing import encoded, fingerprint
+    from ftr.knowledge.indexing import encoded
     from ftr.knowledge.models import ProcessingResult
     from ftr.knowledge.service import now
 
@@ -240,8 +278,9 @@ def record_rejection(repo, payload, error):
         return
     if not repo.db.execute("SELECT 1 FROM kw_jobs WHERE id=?", (value.job_id,)).fetchone():
         return
-    serialized = value.model_dump(mode="json")
-    digest = fingerprint({key: v for key, v in serialized.items() if key != "submission_key"})
+    from ftr.knowledge.service import result_digests
+
+    digest = result_digests(value)[0]
     repo.db.execute(
         "INSERT OR IGNORE INTO kw_submissions(job_id,attempt_id,submission_key,result_digest,accepted,result_json,created_at) VALUES(?,?,?,?,0,?,?)",
         (

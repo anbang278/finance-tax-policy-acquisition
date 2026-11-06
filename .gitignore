@@ -49,3 +49,12 @@ ftr.yaml
 .worker.log
 .worker-start.lock
 .commands.lock
+
+# 本地调研与原始运行制品；公开库仅保留审核后的汇总
+/research/
+/docs/verification/cit-research-loop/*
+!/docs/verification/cit-research-loop/REPORT.md
+/docs/verification/source-expansion/*
+!/docs/verification/source-expansion/README.md
+!/docs/verification/source-expansion/coverage.md
+!/docs/verification/source-expansion/regional-matrix.md

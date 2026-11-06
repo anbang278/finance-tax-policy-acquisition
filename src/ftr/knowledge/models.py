@@ -27,6 +27,27 @@ class Anchor(StrictModel):
     page_number: int | None = Field(default=None, ge=1, strict=True)
 
 
+class TemporalBasis(StrictModel):
+    kind: Literal["effective_from", "effective_to", "tax_period", "filing_period", "transition"]
+    value: str = Field(min_length=1)
+    citations: list[Anchor] = Field(min_length=1)
+
+
+class LegalRelation(StrictModel):
+    kind: Literal["interprets", "implements", "amends", "partially_repeals", "repeals", "extends"]
+    target_record_id: str
+    scope: str = Field(min_length=1)
+    citations: list[Anchor] = Field(min_length=1)
+
+
+class SupportCheck(StrictModel):
+    statement: str = Field(min_length=1)
+    dimension: Literal["support", "conditions", "temporal", "authority"]
+    status: Literal["supported", "contradicted", "insufficient"]
+    reason: str = Field(min_length=1)
+    citations: list[Anchor] = Field(default_factory=list)
+
+
 class ItemContent(StrictModel):
     statement: str = Field(min_length=1)
     nature: Literal["source_rule", "official_explanation", "synthesis", "business_suggestion"]
@@ -39,6 +60,9 @@ class ItemContent(StrictModel):
     scenarios: list[str] = Field(default_factory=list)
     valid_from: str | None = None
     valid_to: str | None = None
+    valid_to_kind: Literal["unknown", "specified", "open_ended"] = "unknown"
+    temporal_basis: list[TemporalBasis] = Field(default_factory=list)
+    legal_relations: list[LegalRelation] = Field(default_factory=list)
     applicability_verified: bool = False
     reasoning: str = ""
     relations: list[dict[str, str]] = Field(default_factory=list)
@@ -52,6 +76,12 @@ class ItemContent(StrictModel):
                 date.fromisoformat(value)
         if self.valid_from and self.valid_to and self.valid_from > self.valid_to:
             raise ValueError("适用期间顺序无效")
+        if self.valid_to:
+            if self.valid_to_kind == "open_ended":
+                raise ValueError("未规定终止与具体终止日期冲突")
+            self.valid_to_kind = "specified"
+        elif self.valid_to_kind == "specified":
+            raise ValueError("明确终止须提供日期")
         if self.nature == "synthesis" and not self.reasoning.strip():
             raise ValueError("综合分析须给出推导说明")
         return self
@@ -94,6 +124,7 @@ class ProcessingResult(StrictModel):
     submission_key: str = Field(min_length=1, max_length=200)
     outputs: list[Output] = Field(default_factory=list)
     findings: list[str] = Field(default_factory=list)
+    checks: list[SupportCheck] = Field(default_factory=list)
     executor: dict[str, str] = Field(default_factory=dict)
 
 
@@ -105,8 +136,25 @@ class JobRequest(StrictModel):
     object_id: str | None = None
     target_version: str | None = None
     executor: Literal["host", "api"] = "host"
+    output_mode: Literal["candidate", "preview"] = "candidate"
     max_calls: int = Field(default=3, ge=1, le=20, strict=True)
     max_input_chars: int = Field(default=60000, ge=1000, le=1000000, strict=True)
+
+    @model_validator(mode="after")
+    def preview_scope(self):
+        if self.output_mode == "preview" and self.job_type not in ("compile", "revise", "precheck"):
+            raise ValueError("预览模式仅用于专题编纂、修订及预审")
+        return self
+
+
+def applicable_at(content: dict, as_of: str) -> bool:
+    if not content.get("applicability_verified") or not content.get("valid_from"):
+        return False
+    if content["valid_from"] > as_of:
+        return False
+    if content.get("valid_to_kind") == "open_ended":
+        return True
+    return bool(content.get("valid_to") and as_of <= content["valid_to"])
 
 
 class EditRequest(StrictModel):

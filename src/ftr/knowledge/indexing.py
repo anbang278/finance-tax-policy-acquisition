@@ -17,6 +17,14 @@ def fingerprint(value):
     return digest(encoded(value).encode())
 
 
+def content_anchors(content):
+    anchors = list(content.get("citations", []))
+    for field in ("temporal_basis", "legal_relations"):
+        for entry in content.get(field, []):
+            anchors.extend(entry["citations"])
+    return anchors
+
+
 def read_evidence(repo, eid):
     from ftr.backup import _checked_file
 

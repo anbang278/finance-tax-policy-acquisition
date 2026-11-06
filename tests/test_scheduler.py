@@ -431,7 +431,7 @@ def test_status_api_backup_old_db_readonly_and_heartbeat(tmp_path):
     assert status(tmp_path)["sources"] == []
     assert database.read_bytes() == before
     with closing(Repository(tmp_path)) as repo:
-        assert repo.db.execute("PRAGMA user_version").fetchone()[0] == 5
+        assert repo.db.execute("PRAGMA user_version").fetchone()[0] == 7
 
 
 def child_environment():

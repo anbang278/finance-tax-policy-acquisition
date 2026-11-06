@@ -12,7 +12,6 @@ from typing import Any
 from pydantic import ValidationError
 
 from ftr.adapters.common import canonical_url
-from ftr.config import load_sources
 from ftr.diagnostics import failure_explanation, limitation_reasons, task_diagnostics, task_report
 from ftr.models import Evidence, digest
 from ftr.web.body_display import recover_body
@@ -121,15 +120,16 @@ class ReadQueries:
             )
 
     def sources(self) -> dict:
-        registry = load_sources()
+        from ftr.sources import catalog_entries
+
         with self.snapshot() as db:
             counts = dict(
                 db.execute(LATEST + "SELECT source_id, COUNT(*) FROM latest GROUP BY source_id")
             )
             return response(
                 items=[
-                    {"source_id": key, **value.model_dump(), "policies_count": counts.get(key, 0)}
-                    for key, value in registry.sources.items()
+                    {**item, "policies_count": counts.get(item["source_id"], 0)}
+                    for item in catalog_entries()
                 ]
             )
 

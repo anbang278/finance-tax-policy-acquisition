@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import subprocess
 import tarfile
 import tempfile
+import tomllib
 from pathlib import Path
 from zipfile import ZipFile
 
 project = Path(__file__).resolve().parents[1]
-wheels = sorted((project / "dist").glob("*.whl"), key=lambda p: p.stat().st_mtime)
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--dist", type=Path, default=project / "dist")
+artifacts = parser.parse_args().dist.resolve()
+wheels = sorted(artifacts.glob("*.whl"), key=lambda p: p.stat().st_mtime)
 if not wheels:
     raise SystemExit("缺少 wheel，请先运行 uv build")
 with ZipFile(wheels[-1]) as wheel:
@@ -22,9 +27,41 @@ with ZipFile(wheels[-1]) as wheel:
     built_identity = json.loads(wheel.read("ftr/data/build-identity.json"))
     assert built_identity["repository"] == "anbang278/finance-tax-policy-acquisition"
     assert "Version: " + built_identity["version"] in metadata
-sdists = sorted((project / "dist").glob("*.tar.gz"), key=lambda p: p.stat().st_mtime)
+sdists = sorted(artifacts.glob("*.tar.gz"), key=lambda p: p.stat().st_mtime)
 assert sdists, "缺少 sdist"
 with tarfile.open(sdists[-1]) as source:
+    members = source.getnames()
+    relative_members = [name.partition("/")[2] for name in members]
+    forbidden = (
+        "research/",
+        ".ftr-data/",
+        "docs/verification/source-expansion/central/",
+        "docs/verification/source-expansion/regional/",
+        "docs/verification/source-expansion/regional-extra/",
+        "docs/verification/cit-research-loop/host/",
+        "docs/verification/cit-research-loop/seed/",
+        "docs/verification/cit-research-loop/evaluation/",
+    )
+    assert not any(name.startswith(forbidden) for name in relative_members), (
+        "源码包不得包含本地研究资料、登录态截图、模型任务包或完整官网原件"
+    )
+
+    def source_text(path):
+        member = next(name for name in members if name.partition("/")[2] == path)
+        handle = source.extractfile(member)
+        assert handle is not None
+        return handle.read().decode("utf-8")
+
+    expected_version = built_identity["version"]
+    assert tomllib.loads(source_text("pyproject.toml"))["project"]["version"] == expected_version
+    assert json.loads(source_text("plugin.json"))["version"] == expected_version
+    assert json.loads(source_text(".codex-plugin/plugin.json"))["version"] == expected_version
+    assert f'__version__ = "{expected_version}"' in source_text("src/ftr/__init__.py")
+    lock_packages = tomllib.loads(source_text("uv.lock"))["package"]
+    assert next(p["version"] for p in lock_packages if p["name"] == "finance-tax-research") == (
+        expected_version
+    )
+    assert f"当前版本为 `{expected_version}`" in source_text("README.md")
     name = next(
         name for name in source.getnames() if name.endswith("/src/ftr/data/build-identity.json")
     )
@@ -101,13 +138,28 @@ except ValidationError:
 else:
     raise AssertionError("未知范围字段没有拒绝")
 task = repo.create_task(TaskRequest(source_ids=["mof"],date_from=date(2026,9,1),date_to=date(2026,9,30)))
-assert repo.db.execute("PRAGMA user_version").fetchone()[0] == 5
+assert repo.db.execute("PRAGMA user_version").fetchone()[0] == 7
 from ftr.knowledge.service import Knowledge
 from ftr.knowledge.models import ProcessingResult
 knowledge=Knowledge(repo)
 knowledge.seed()
 assert len(knowledge.listing("topics"))==3
 assert ProcessingResult.model_json_schema()["properties"]["job_id"]
+assert "checks" in ProcessingResult.model_json_schema()["properties"]
+from ftr.policy import policy_identity
+from ftr.research import ResearchDraft
+assert policy_identity("财税〔2018〕64号", "", "sample")["year"] == 2018
+assert "context" in ResearchDraft.model_json_schema()["properties"]
+assert "official_urls" in TaskRequest.model_json_schema()["properties"]
+assert "source_snapshot" in TaskRequest.model_json_schema()["properties"]
+from ftr.sources import catalog_entries, source_snapshot
+from ftr.schedule_plan import parse_plan_payload
+catalog = catalog_entries()
+assert len({item["authority_id"] for item in catalog if item["authority_id"].startswith("tax_")}) == 36
+assert len(source_snapshot(["mof", "tax_shanghai_policy"])) == 2
+assert parse_plan_payload({}).scope.source_ids == ["mof", "chinatax"]
+assert files("ftr").joinpath("data/pending-sources.yaml").is_file()
+assert all("selectable" in item and "collectable" in item for item in catalog)
 assert settings.processing.enabled is False
 repo.close()
 from ftr.cli import parser,run

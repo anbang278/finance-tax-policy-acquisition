@@ -216,7 +216,7 @@ def test_readonly_old_database_does_not_migrate(tmp_path):
         assert Knowledge(repo).listing("domains") == [] or Knowledge(repo).listing("domains")
     assert (tmp_path / "database.sqlite3").read_bytes() == before
     with closing(Repository(tmp_path)) as repo:
-        assert repo.db.execute("PRAGMA user_version").fetchone()[0] == 5
+        assert repo.db.execute("PRAGMA user_version").fetchone()[0] == 7
 
 
 def test_api_success_and_no_write_lock_during_call(kb):
@@ -914,6 +914,91 @@ def test_browser_full_knowledge_wiki_flow(kb, tmp_path, width):
             assert r.record_id in Path(dl.value.path()).read_text(encoding="utf-8")
             page.reload()
             expect(page.locator("#wiki-mode")).to_contain_text("本机管理")
+            preview_item = candidate(k, r)
+            page.get_by_role("button", name="刷新", exact=True).click()
+            page.locator(".wiki-management summary").click()
+            page.locator("#wiki-job-form [name=job_type]").select_option("compile")
+            page.locator("#wiki-job-form [name=output_mode]").select_option("preview")
+            page.locator(f'#wiki-knowledge input[value="{preview_item}"]').check()
+            page.get_by_role("button", name="创建待处理任务", exact=True).click()
+            preview_job = wait(
+                lambda: next(
+                    (
+                        j["id"]
+                        for j in k.listing("jobs")
+                        if j["package"]["request"].get("output_mode") == "preview"
+                    ),
+                    None,
+                )
+            )
+            package = k.package(preview_job)
+            preview_result = {
+                "job_id": preview_job,
+                "attempt_id": package["attempt_id"],
+                "input_digest": package["input_digest"],
+                "submission_key": "preview",
+                "outputs": [
+                    {
+                        "kind": "page",
+                        "title": "候选预览专题",
+                        "content": {
+                            "sections": [
+                                {
+                                    "section_id": "conditions",
+                                    "title": "适用条件",
+                                    "text": "有条件的候选说明",
+                                    "knowledge_versions": [preview_item],
+                                }
+                            ],
+                            "limitations": ["隔离虚构样本"],
+                        },
+                    }
+                ],
+            }
+            page.get_by_role("button", name="刷新", exact=True).click()
+            page.get_by_role("button", name="加工任务", exact=True).click()
+            page.locator(f'[data-job="{preview_job}"]').click()
+            source.write_text(json.dumps(preview_result, ensure_ascii=False), encoding="utf-8")
+            page.locator("#wiki-result-file").set_input_files(source)
+            wait(lambda: k.job(preview_job)["state"] == "completed")
+            preview_page = k.job(preview_job)["result"]["versions"][0]
+            preview_object = k.version(preview_page)["object_id"]
+            page.get_by_role("button", name="刷新", exact=True).click()
+            page.get_by_role("button", name="专题 Wiki", exact=True).click()
+            page.locator(f'[data-object="{preview_object}"]').click()
+            with page.expect_download() as dl:
+                page.get_by_role("link", name="导出 Markdown", exact=True).first.click()
+            assert "候选预览" in Path(dl.value.path()).read_text(encoding="utf-8")
+            assert k.object(preview_object)["current_version"] is None
+            page.get_by_text("政策身份与资料覆盖", exact=True).click()
+            page.locator("#wiki-policy-refresh").click()
+            expect(page.locator("#wiki-policy-groups")).to_contain_text("虚构企业所得税优惠")
+            page.get_by_text("研究报告校验与预览", exact=True).click()
+            report = {
+                "question": "虚构条件核对",
+                "as_of": "2026-11-06",
+                "claims": [
+                    {
+                        "text": "符合条件才可申请",
+                        "kind": "source_rule",
+                        "citations": [
+                            {
+                                "record_id": r.record_id,
+                                "evidence_id": r.evidence_id,
+                                "quote": "符合条件的主体可以申请。",
+                            }
+                        ],
+                    }
+                ],
+            }
+            source.write_text(json.dumps(report, ensure_ascii=False), encoding="utf-8")
+            page.locator("#wiki-research-file").set_input_files(source)
+            expect(page.locator("#wiki-research-status")).to_have_attribute(
+                "data-state", "needs_review"
+            )
+            with page.expect_download() as dl:
+                page.locator("#wiki-research-download").click()
+            assert "虚构条件核对" in Path(dl.value.path()).read_text(encoding="utf-8")
             assert not errors
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             evidence = os.environ.get("KNOWLEDGE_AUDIT_EVIDENCE")

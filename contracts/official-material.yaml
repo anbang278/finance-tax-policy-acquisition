@@ -1,9 +1,10 @@
 id: official-material
-version: "1.0"
+version: "1.1"
 accepted_types:
   - policy_file
   - policy_announcement
   - official_interpretation
+  - official_qa
   - release_message
   - other
 on_uncertain: quarantine

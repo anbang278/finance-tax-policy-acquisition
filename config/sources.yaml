@@ -3,23 +3,2634 @@ sources:
     name: 中华人民共和国财政部政策发布
     entry: https://www.mof.gov.cn/zhengwuxinxi/zhengcefabu/
     allowed_hosts:
-      - www.mof.gov.cn
-      - gks.mof.gov.cn
-      - jrs.mof.gov.cn
-      - jkw.mof.gov.cn
-      - szs.mof.gov.cn
-      - kjs.mof.gov.cn
-      - yss.mof.gov.cn
-      - jjs.mof.gov.cn
-      - gss.mof.gov.cn
-      - sbs.mof.gov.cn
-      - zwgls.mof.gov.cn
-      - nys.mof.gov.cn
+    - www.mof.gov.cn
+    - gks.mof.gov.cn
+    - jrs.mof.gov.cn
+    - jkw.mof.gov.cn
+    - szs.mof.gov.cn
+    - kjs.mof.gov.cn
+    - yss.mof.gov.cn
+    - jjs.mof.gov.cn
+    - gss.mof.gov.cn
+    - sbs.mof.gov.cn
+    - zwgls.mof.gov.cn
+    - nys.mof.gov.cn
+    - zyhj.mof.gov.cn
+    - tfs.mof.gov.cn
+    - zcgls.mof.gov.cn
     listing_date_kind: column_date
+    authority_id: mof
+    publisher: 中华人民共和国财政部
+    region: 全国
+    categories:
+    - fiscal
+    - tax
+    channel: policy
+    adapter: mof
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
   chinatax:
     name: 国家税务总局政策法规库
     entry: https://fgk.chinatax.gov.cn/zcfgk/c100006/listflfg.html
     allowed_hosts:
-      - fgk.chinatax.gov.cn
-      - www.chinatax.gov.cn
+    - fgk.chinatax.gov.cn
+    - www.chinatax.gov.cn
     listing_date_kind: issued_date
+    authority_id: chinatax
+    publisher: 国家税务总局
+    region: 全国
+    categories:
+    - tax
+    channel: policy
+    adapter: chinatax
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。税务列表访问受限：HTTP 403
+  tax_tianjin_policy:
+    name: 国家税务总局天津市税务局｜政策文件
+    entry: https://tianjin.chinatax.gov.cn/u_zlmViewMx.action?fjdm=11200000000&lmdm=030001&downbz=null
+    allowed_hosts:
+    - tianjin.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_tianjin
+    publisher: 国家税务总局天津市税务局
+    region: 天津
+    categories:
+    - tax
+    channel: policy
+    adapter: public_browser
+    profile:
+      schema_version: '1'
+      listing:
+        container: //html/body/div[2]/table/tbody
+        items: ./tr[td[@class="t31"]]
+        link: ./td[2]/a
+        title: ./td[2]/a/@title
+        date: ./td[@class="t31"]
+      pagination:
+        mode: browser_next
+        next: //*[@id="next"]
+        end_selector: //*[@id="next"][@class="disabled"]
+      detail:
+        title: //meta[@name="ArticleTitle"]/@content
+        body: //*[@id="conntentNR"]
+        attachments:
+        - //html/body/div[10]/div/div[1]/div[2]/div[5]/table/tbody/tr/td/p[17]/a
+        - //html/body/div[10]/div/div[1]/div[2]/div[5]/table/tbody/tr/td/p[18]/a
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+      browser:
+        wait_for: //html/body/div[2]/table/tbody/tr/td[@width="650"]
+        detail_wait_for: //*[@id="conntentNR"]/p[1]
+    verification_status: partial
+    verification_note: 2026-11-06 产品链路有界验证：PARTIAL。部分正文或关联附件未完成，见运行失败与恢复记录
+    registry_version: '2026-11-06'
+  tax_tianjin_normative:
+    name: 国家税务总局天津市税务局｜规范性文件
+    entry: https://tianjin.chinatax.gov.cn/u_zlmViewMx.action?fjdm=11200000000&lmdm=030006
+    allowed_hosts:
+    - tianjin.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_tianjin
+    publisher: 国家税务总局天津市税务局
+    region: 天津
+    categories:
+    - tax
+    channel: normative
+    adapter: public_browser
+    profile:
+      schema_version: '1'
+      listing:
+        container: //html/body/div[2]/table/tbody
+        items: ./tr[td[@class="t31"]]
+        link: ./td[2]/a
+        title: ./td[2]/a/@title
+        date: ./td[@class="t31"]
+      pagination:
+        mode: browser_next
+        next: //*[@id="next"]
+        end_selector: //*[@id="next"][@class="disabled"]
+      detail:
+        title: //meta[@name="ArticleTitle"]/@content
+        body: //*[@id="conntentNR"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+      browser:
+        wait_for: //html/body/div[2]/table/tbody/tr/td[@width="650"]
+        detail_wait_for: //*[@id="conntentNR"]/p[1]
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  tax_tianjin_interpretation:
+    name: 国家税务总局天津市税务局｜政策解读
+    entry: https://tianjin.chinatax.gov.cn/u_zlmViewMx.action?fjdm=11200000000&lmdm=030002&downbz=null
+    allowed_hosts:
+    - tianjin.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_tianjin
+    publisher: 国家税务总局天津市税务局
+    region: 天津
+    categories:
+    - tax
+    - practice
+    channel: interpretation
+    adapter: public_browser
+    profile:
+      schema_version: '1'
+      listing:
+        container: //html/body/div[2]/table/tbody
+        items: ./tr[td[@class="t31"]]
+        link: ./td[2]/a
+        title: ./td[2]/a/@title
+        date: ./td[@class="t31"]
+      pagination:
+        mode: browser_next
+        next: //*[@id="next"]
+        end_selector: //*[@id="next"][@class="disabled"]
+      detail:
+        title: //meta[@name="ArticleTitle"]/@content
+        body: //*[@id="conntentNR"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+      browser:
+        wait_for: //html/body/div[2]/table/tbody/tr/td[@width="650"]
+        detail_wait_for: //*[@id="conntentNR"]/p[1]
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  tax_tianjin_qa:
+    name: 国家税务总局天津市税务局｜公开业务问答
+    entry: https://tianjin.chinatax.gov.cn/u_zlmViewMx.action?fjdm=11200000000&lmdm=030005
+    allowed_hosts:
+    - tianjin.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_tianjin
+    publisher: 国家税务总局天津市税务局
+    region: 天津
+    categories:
+    - tax
+    - practice
+    channel: qa
+    adapter: public_browser
+    profile:
+      schema_version: '1'
+      listing:
+        container: //html/body/div[2]/table/tbody
+        items: ./tr[td[@class="t31"]]
+        link: ./td[2]/a
+        title: ./td[2]/a/@title
+        date: ./td[@class="t31"]
+      pagination:
+        mode: browser_next
+        next: //*[@id="next"]
+        end_selector: //*[@id="next"][@class="disabled"]
+      detail:
+        title: //meta[@name="ArticleTitle"]/@content
+        body: //*[@id="conntentNR"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+      browser:
+        wait_for: //html/body/div[2]/table/tbody/tr/td[@width="650"]
+        detail_wait_for: //*[@id="conntentNR"]/p[1]
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  tax_shanxi_policy:
+    name: 国家税务总局山西省税务局｜政策文件
+    entry: https://shanxi.chinatax.gov.cn/web/list/sx-11400-545
+    allowed_hosts:
+    - shanxi.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_shanxi
+    publisher: 国家税务总局山西省税务局
+    region: 山西
+    categories:
+    - tax
+    channel: policy
+    adapter: public_html
+    profile: {}
+    verification_status: blocked
+    verification_note: '2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：Actual
+      normal private Chromium HTTPS channel probe failed: HTTP 403; no access-control
+      bypass attempted.'
+    registry_version: '2026-11-06'
+  tax_shanxi_interpretation:
+    name: 国家税务总局山西省税务局｜政策解读
+    entry: https://shanxi.chinatax.gov.cn/web/list/sx-11400-547
+    allowed_hosts:
+    - shanxi.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_shanxi
+    publisher: 国家税务总局山西省税务局
+    region: 山西
+    categories:
+    - tax
+    - practice
+    channel: interpretation
+    adapter: public_html
+    profile: {}
+    verification_status: blocked
+    verification_note: '2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：Actual
+      normal private Chromium HTTPS channel probe failed: HTTP 403; no access-control
+      bypass attempted.'
+    registry_version: '2026-11-06'
+  tax_neimenggu_policy:
+    name: 国家税务总局内蒙古自治区税务局｜政策文件
+    entry: https://neimenggu.chinatax.gov.cn/zcwj/zxwj/
+    allowed_hosts:
+    - neimenggu.chinatax.gov.cn
+    - fgk.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_neimenggu
+    publisher: 国家税务总局内蒙古自治区税务局
+    region: 内蒙古
+    categories:
+    - tax
+    channel: policy
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //*[@id="snxmtimg"]
+        items: ./ul[@class="snewslist"]/li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: template
+        template: index_{index}.html
+        total_pages_variable: countPage
+      detail:
+        title: //meta[@name="ArticleTitle"]/@content
+        body: //*[@id="sdecontent"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+    verification_status: partial
+    verification_note: 2026-11-06 产品链路有界验证：PARTIAL。来源请求失败（ReadTimeout）
+    registry_version: '2026-11-06'
+  tax_neimenggu_interpretation:
+    name: 国家税务总局内蒙古自治区税务局｜政策解读
+    entry: https://neimenggu.chinatax.gov.cn/zcwj/zcjd/
+    allowed_hosts:
+    - neimenggu.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_neimenggu
+    publisher: 国家税务总局内蒙古自治区税务局
+    region: 内蒙古
+    categories:
+    - tax
+    - practice
+    channel: interpretation
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //*[@id="snxmtimg"]
+        items: ./ul[@class="snewslist"]/li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: template
+        template: index_{index}.html
+        total_pages_variable: countPage
+      detail:
+        title: //meta[@name="ArticleTitle"]/@content
+        body: //*[@id="sdecontent"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  tax_neimenggu_qa:
+    name: 国家税务总局内蒙古自治区税务局｜公开业务问答
+    entry: https://neimenggu.chinatax.gov.cn/zcwj/rdwd/
+    allowed_hosts:
+    - neimenggu.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_neimenggu
+    publisher: 国家税务总局内蒙古自治区税务局
+    region: 内蒙古
+    categories:
+    - tax
+    - practice
+    channel: qa
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //*[@id="snxmtimg"]
+        items: ./ul[@class="snewslist"]/li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: template
+        template: index_{index}.html
+        total_pages_variable: countPage
+      detail:
+        title: //meta[@name="ArticleTitle"]/@content
+        body: //*[@id="sdecontent"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  tax_liaoning_policy:
+    name: 国家税务总局辽宁省税务局｜政策文件
+    entry: https://liaoning.chinatax.gov.cn/col/col5869/index.html
+    allowed_hosts:
+    - liaoning.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_liaoning
+    publisher: 国家税务总局辽宁省税务局
+    region: 辽宁
+    categories:
+    - tax
+    channel: policy
+    adapter: public_html
+    profile: {}
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：Real
+      latest-file hub points via More to official policy-law search column col5869.
+      Normal visible UI search action produces HTTPS public GET result iframe with10
+      article rows (exact URL in liaoning-query-ui-observation.json). Numeric pagination
+      window and compound total text require additional restricted profile support;
+      this is a rule gap, not external access block.
+    registry_version: '2026-11-06'
+  tax_liaoning_interpretation:
+    name: 国家税务总局辽宁省税务局｜政策解读
+    entry: https://liaoning.chinatax.gov.cn/col/col1778/index.html
+    allowed_hosts:
+    - liaoning.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_liaoning
+    publisher: 国家税务总局辽宁省税务局
+    region: 辽宁
+    categories:
+    - tax
+    - practice
+    channel: interpretation
+    adapter: public_browser
+    profile:
+      schema_version: '1'
+      listing:
+        container: //html/body/div[1]/div[3]/div/div/div[5]/div/div/div/div/div/ul
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: browser_next
+        next: //a[@title="下页"]
+        end_selector: //a[@title="下页"][@disabled]
+      detail:
+        title: //*[@id="title"]
+        body: //*[@id="zoom"]
+        attachments: []
+        related_links: []
+      browser:
+        wait_for: //html/body/div[1]/div[3]/div/div/div[5]/div/div/div/div/div/ul/li
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  tax_liaoning_qa:
+    name: 国家税务总局辽宁省税务局｜公开业务问答
+    entry: https://liaoning.chinatax.gov.cn/col/col99/index.html
+    allowed_hosts:
+    - liaoning.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_liaoning
+    publisher: 国家税务总局辽宁省税务局
+    region: 辽宁
+    categories:
+    - tax
+    - practice
+    channel: qa
+    adapter: public_browser
+    profile:
+      schema_version: '1'
+      listing:
+        container: //html/body/div[1]/div[3]/div/div/div[5]/div/div/div/div/div/ul
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: browser_next
+        next: //a[@title="下页"]
+        end_selector: //a[@title="下页"][@disabled]
+      detail:
+        title: //*[@id="title"]
+        body: //*[@id="zoom"]
+        attachments: []
+        related_links: []
+      browser:
+        wait_for: //html/body/div[1]/div[3]/div/div/div[5]/div/div/div/div/div/ul/li
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  tax_shanghai_policy:
+    name: 国家税务总局上海市税务局｜政策文件
+    entry: https://shanghai.chinatax.gov.cn/zcfw/zxwj/
+    allowed_hosts:
+    - shanghai.chinatax.gov.cn
+    listing_date_kind: column_publication_date
+    authority_id: tax_shanghai
+    publisher: 国家税务总局上海市税务局
+    region: 上海
+    categories:
+    - tax
+    channel: policy
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //ul[@class="infolist"]
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: template
+        template: index_{index}.html
+        total_pages_variable: pagecount
+      detail:
+        title: //*[@id="ivs_title"]
+        body: //*[@id="content"]
+        attachments:
+        - //a[@class="pdfxz"]
+        - //a[@class="pdfxz pdfxz1"]
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+    verification_status: partial
+    verification_note: 2026-11-06 产品链路有界验证：PARTIAL。当前解析器复核发现原件或附件缺口：正文明确列示附件，但未发现下载链接或可确认的内联附件内容，附件完整性待核
+    registry_version: '2026-11-06'
+  tax_shanghai_interpretation:
+    name: 国家税务总局上海市税务局｜政策解读
+    entry: https://shanghai.chinatax.gov.cn/zcfw/zcjd/
+    allowed_hosts:
+    - shanghai.chinatax.gov.cn
+    listing_date_kind: column_publication_date
+    authority_id: tax_shanghai
+    publisher: 国家税务总局上海市税务局
+    region: 上海
+    categories:
+    - tax
+    - practice
+    channel: interpretation
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //ul[@class="infolist"]
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: template
+        template: index_{index}.html
+        total_pages_variable: pagecount
+      detail:
+        title: //*[@id="ivs_title"]
+        body: //*[@id="content"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  tax_shanghai_qa:
+    name: 国家税务总局上海市税务局｜公开业务问答
+    entry: https://shanghai.chinatax.gov.cn/zcfw/rdwd/
+    allowed_hosts:
+    - shanghai.chinatax.gov.cn
+    listing_date_kind: column_publication_date
+    authority_id: tax_shanghai
+    publisher: 国家税务总局上海市税务局
+    region: 上海
+    categories:
+    - tax
+    - practice
+    channel: qa
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //ul[@class="infolist"]
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: template
+        template: index_{index}.html
+        total_pages_variable: pagecount
+      detail:
+        title: //*[@id="ivs_title"]
+        body: //*[@id="content"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  tax_jiangsu_policy:
+    name: 国家税务总局江苏省税务局｜政策文件
+    entry: https://jiangsu.chinatax.gov.cn/col/col8349/index.html
+    allowed_hosts:
+    - jiangsu.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_jiangsu
+    publisher: 国家税务总局江苏省税务局
+    region: 江苏
+    categories:
+    - tax
+    channel: policy
+    adapter: public_html
+    profile: {}
+    verification_status: blocked
+    verification_note: '2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：Actual
+      normal private Chromium HTTPS channel probe failed: HTTP 403; no access-control
+      bypass attempted.'
+    registry_version: '2026-11-06'
+  tax_jiangsu_interpretation:
+    name: 国家税务总局江苏省税务局｜政策解读
+    entry: https://jiangsu.chinatax.gov.cn/col/col8350/index.html
+    allowed_hosts:
+    - jiangsu.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_jiangsu
+    publisher: 国家税务总局江苏省税务局
+    region: 江苏
+    categories:
+    - tax
+    - practice
+    channel: interpretation
+    adapter: public_html
+    profile: {}
+    verification_status: blocked
+    verification_note: '2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：Actual
+      normal private Chromium HTTPS channel probe failed: HTTP 403; no access-control
+      bypass attempted.'
+    registry_version: '2026-11-06'
+  tax_jiangsu_qa:
+    name: 国家税务总局江苏省税务局｜公开业务问答
+    entry: https://jiangsu.chinatax.gov.cn/col/col8353/index.html
+    allowed_hosts:
+    - jiangsu.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_jiangsu
+    publisher: 国家税务总局江苏省税务局
+    region: 江苏
+    categories:
+    - tax
+    - practice
+    channel: qa
+    adapter: public_html
+    profile: {}
+    verification_status: blocked
+    verification_note: '2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：Actual
+      normal private Chromium HTTPS channel probe failed: HTTP 403; no access-control
+      bypass attempted.'
+    registry_version: '2026-11-06'
+  tax_zhejiang_policy:
+    name: 国家税务总局浙江省税务局｜政策文件
+    entry: https://zhejiang.chinatax.gov.cn/col/col23175/index.html
+    allowed_hosts:
+    - zhejiang.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_zhejiang
+    publisher: 国家税务总局浙江省税务局
+    region: 浙江
+    categories:
+    - tax
+    channel: policy
+    adapter: public_html
+    profile: {}
+    verification_status: blocked
+    verification_note: '2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：Actual
+      normal private Chromium HTTPS channel probe failed: HTTP 403; no access-control
+      bypass attempted.'
+    registry_version: '2026-11-06'
+  tax_zhejiang_interpretation:
+    name: 国家税务总局浙江省税务局｜政策解读
+    entry: https://zhejiang.chinatax.gov.cn/col/col7575/index.html?vc_xxgkarea=11330000002484088Y
+    allowed_hosts:
+    - zhejiang.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_zhejiang
+    publisher: 国家税务总局浙江省税务局
+    region: 浙江
+    categories:
+    - tax
+    - practice
+    channel: interpretation
+    adapter: public_html
+    profile: {}
+    verification_status: blocked
+    verification_note: '2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：Actual
+      normal private Chromium HTTPS channel probe failed: HTTP 403; no access-control
+      bypass attempted.'
+    registry_version: '2026-11-06'
+  tax_zhejiang_qa:
+    name: 国家税务总局浙江省税务局｜公开业务问答
+    entry: https://zhejiang.chinatax.gov.cn/col/col13314/index.html
+    allowed_hosts:
+    - zhejiang.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_zhejiang
+    publisher: 国家税务总局浙江省税务局
+    region: 浙江
+    categories:
+    - tax
+    - practice
+    channel: qa
+    adapter: public_html
+    profile: {}
+    verification_status: blocked
+    verification_note: '2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：Actual
+      normal private Chromium HTTPS channel probe failed: HTTP 403; no access-control
+      bypass attempted.'
+    registry_version: '2026-11-06'
+  tax_anhui_policy:
+    name: 国家税务总局安徽省税务局｜政策文件
+    entry: https://anhui.chinatax.gov.cn/col/col13773/index.html
+    allowed_hosts:
+    - anhui.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_anhui
+    publisher: 国家税务总局安徽省税务局
+    region: 安徽
+    categories:
+    - tax
+    channel: policy
+    adapter: public_html
+    profile: {}
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：Normal
+      browser actual UI tail navigation has next href pageNum=72 and declared total71,
+      yet current input remains1 and first article URLs equal first-page records.
+      Distinct final article list not established. First list also contains an hrss.ah.gov.cn
+      external article link; exact host not widened.
+    registry_version: '2026-11-06'
+  tax_anhui_interpretation:
+    name: 国家税务总局安徽省税务局｜政策解读
+    entry: https://anhui.chinatax.gov.cn/col/col9435/index.html
+    allowed_hosts:
+    - anhui.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_anhui
+    publisher: 国家税务总局安徽省税务局
+    region: 安徽
+    categories:
+    - tax
+    - practice
+    channel: interpretation
+    adapter: public_browser
+    profile:
+      schema_version: '1'
+      listing:
+        container: //div[@class="default_pgContainer"]
+        items: ./li[a]
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: browser_next
+        next: //a[@title="下页"]
+        end_selector: //a[@title="下页"][@disabled]
+      detail:
+        title: //*[@id="title"]
+        body: //*[@id="zoom"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+      browser:
+        wait_for: //div[@class="default_pgContainer"]/li
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  tax_anhui_qa:
+    name: 国家税务总局安徽省税务局｜公开业务问答
+    entry: https://anhui.chinatax.gov.cn/col/col9438/index.html
+    allowed_hosts:
+    - anhui.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_anhui
+    publisher: 国家税务总局安徽省税务局
+    region: 安徽
+    categories:
+    - tax
+    - practice
+    channel: qa
+    adapter: public_browser
+    profile:
+      schema_version: '1'
+      listing:
+        container: //div[@class="default_pgContainer"]
+        items: ./li[a]
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: browser_next
+        next: //a[@title="下页"]
+        end_selector: //a[@title="下页"][@disabled]
+      detail:
+        title: //*[@id="title"]
+        body: //*[@id="zoom"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+      browser:
+        wait_for: //div[@class="default_pgContainer"]/li
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  tax_fujian_policy:
+    name: 国家税务总局福建省税务局｜政策文件
+    entry: https://fujian.chinatax.gov.cn/sszczl/zcwj02/
+    allowed_hosts:
+    - fujian.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_fujian
+    publisher: 国家税务总局福建省税务局
+    region: 福建
+    categories:
+    - tax
+    channel: policy
+    adapter: public_browser
+    profile:
+      schema_version: '1'
+      listing:
+        container: //div[@avalonctrl="list"]
+        items: ./div/ul[@class="list3"]/li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: browser_next
+        next: //div[@avalonctrl="list_pagebar"]/a[.="下一页"]
+        end_selector: //div[@avalonctrl="list_pagebar"]/span[.="下一页"][@class="disab"]
+      detail:
+        title: //meta[@name="ArticleTitle"]/@content
+        body: //div[@class="xl_news clearflx font0"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+      browser:
+        wait_for: //div[@avalonctrl="list"]
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  tax_fujian_interpretation:
+    name: 国家税务总局福建省税务局｜政策解读
+    entry: https://fujian.chinatax.gov.cn/sszczl/zcjd02/
+    allowed_hosts:
+    - fujian.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_fujian
+    publisher: 国家税务总局福建省税务局
+    region: 福建
+    categories:
+    - tax
+    - practice
+    channel: interpretation
+    adapter: public_browser
+    profile:
+      schema_version: '1'
+      listing:
+        container: //div[@avalonctrl="list"]
+        items: ./div/ul[@class="list3"]/li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: browser_next
+        next: //div[@avalonctrl="list_pagebar"]/a[.="下一页"]
+        end_selector: //div[@avalonctrl="list_pagebar"]/span[.="下一页"][@class="disab"]
+      detail:
+        title: //meta[@name="ArticleTitle"]/@content
+        body: //div[@class="xl_news clearflx font0"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+      browser:
+        wait_for: //div[@avalonctrl="list"]
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  tax_fujian_qa:
+    name: 国家税务总局福建省税务局｜公开业务问答
+    entry: https://fujian.chinatax.gov.cn/bsfw/nsfwrx/12366wtj_201/
+    allowed_hosts:
+    - fujian.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_fujian
+    publisher: 国家税务总局福建省税务局
+    region: 福建
+    categories:
+    - tax
+    - practice
+    channel: qa
+    adapter: public_browser
+    profile:
+      schema_version: '1'
+      listing:
+        container: //div[@avalonctrl="list"]
+        items: ./div/ul[@class="list3"]/li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: browser_next
+        next: //div[@avalonctrl="list_pagebar"]/a[.="下一页"]
+        end_selector: //div[@avalonctrl="list_pagebar"]/span[.="下一页"][@class="disab"]
+      detail:
+        title: //meta[@name="ArticleTitle"]/@content
+        body: //*[@class="TRS_Editor"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+      browser:
+        wait_for: //div[@avalonctrl="list"]/div/ul[@class="list3"]/li
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  tax_jiangxi_policy:
+    name: 国家税务总局江西省税务局｜政策文件
+    entry: https://jiangxi.chinatax.gov.cn/col/col31884/index.html
+    allowed_hosts:
+    - jiangxi.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_jiangxi
+    publisher: 国家税务总局江西省税务局
+    region: 江西
+    categories:
+    - tax
+    channel: policy
+    adapter: public_html
+    profile: {}
+    verification_status: blocked
+    verification_note: "2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：Actual\
+      \ normal private Chromium HTTPS channel probe failed: Page.goto: net::ERR_EMPTY_RESPONSE\
+      \ at https://jiangxi.chinatax.gov.cn/col/col31884/index.html\nCall log:\n  -\
+      \ navigating to \"https://jiangxi.chinatax.gov.cn/col/col31884/index.html\"\
+      , waiting until \"domcontentloaded\"\n; no access-control bypass attempted."
+    registry_version: '2026-11-06'
+  tax_jiangxi_interpretation:
+    name: 国家税务总局江西省税务局｜政策解读
+    entry: https://jiangxi.chinatax.gov.cn/col/col31043/index.html
+    allowed_hosts:
+    - jiangxi.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_jiangxi
+    publisher: 国家税务总局江西省税务局
+    region: 江西
+    categories:
+    - tax
+    - practice
+    channel: interpretation
+    adapter: public_html
+    profile: {}
+    verification_status: blocked
+    verification_note: "2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：Actual\
+      \ normal private Chromium HTTPS channel probe failed: Page.goto: net::ERR_EMPTY_RESPONSE\
+      \ at https://jiangxi.chinatax.gov.cn/col/col31043/index.html\nCall log:\n  -\
+      \ navigating to \"https://jiangxi.chinatax.gov.cn/col/col31043/index.html\"\
+      , waiting until \"domcontentloaded\"\n; no access-control bypass attempted."
+    registry_version: '2026-11-06'
+  tax_jiangxi_qa:
+    name: 国家税务总局江西省税务局｜公开业务问答
+    entry: https://jiangxi.chinatax.gov.cn/col/col35842/index.html
+    allowed_hosts:
+    - jiangxi.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_jiangxi
+    publisher: 国家税务总局江西省税务局
+    region: 江西
+    categories:
+    - tax
+    - practice
+    channel: qa
+    adapter: public_html
+    profile: {}
+    verification_status: blocked
+    verification_note: "2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：Actual\
+      \ normal private Chromium HTTPS channel probe failed: Page.goto: net::ERR_EMPTY_RESPONSE\
+      \ at https://jiangxi.chinatax.gov.cn/col/col35842/index.html\nCall log:\n  -\
+      \ navigating to \"https://jiangxi.chinatax.gov.cn/col/col35842/index.html\"\
+      , waiting until \"domcontentloaded\"\n; no access-control bypass attempted."
+    registry_version: '2026-11-06'
+  tax_henan_policy:
+    name: 国家税务总局河南省税务局｜政策文件
+    entry: https://henan.chinatax.gov.cn/zcwj/zxwj/
+    allowed_hosts:
+    - henan.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_henan
+    publisher: 国家税务总局河南省税务局
+    region: 河南
+    categories:
+    - tax
+    channel: policy
+    adapter: public_browser
+    profile:
+      schema_version: '1'
+      listing:
+        container: //ul[@class="listCon"]
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: browser_next
+        next: //ul[@class="pages"]/li[.="下一页"]
+        end_selector: //ul[@class="pages"]/li[.="下一页"][@class="pgNext pgEmpty"]
+      detail:
+        title: //meta[@name="ArticleTitle"]/@content
+        body: //*[@id="mainText"]
+        attachments:
+        - //html/body/div[3]/div[1]/div[2]/div[2]/div[2]/div[1]/p[16]/a
+        - //html/body/div[3]/div[1]/div[2]/div[2]/div[2]/div[1]/p[17]/a
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+      browser:
+        wait_for: //ul[@class="pages"]/li[.="下一页"]
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。公开来源链接的协议、精确主机或端口未获许可
+    registry_version: '2026-11-06'
+  tax_henan_interpretation:
+    name: 国家税务总局河南省税务局｜政策解读
+    entry: https://henan.chinatax.gov.cn/zcwj/zcjd/
+    allowed_hosts:
+    - henan.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_henan
+    publisher: 国家税务总局河南省税务局
+    region: 河南
+    categories:
+    - tax
+    - practice
+    channel: interpretation
+    adapter: public_browser
+    profile:
+      schema_version: '1'
+      listing:
+        container: //ul[@class="listCon"]
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: browser_next
+        next: //ul[@class="pages"]/li[.="下一页"]
+        end_selector: //ul[@class="pages"]/li[.="下一页"][@class="pgNext pgEmpty"]
+      detail:
+        title: //meta[@name="ArticleTitle"]/@content
+        body: //*[@id="mainText"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+      browser:
+        wait_for: //ul[@class="pages"]/li[.="下一页"]
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。公开来源链接的协议、精确主机或端口未获许可
+    registry_version: '2026-11-06'
+  tax_henan_qa:
+    name: 国家税务总局河南省税务局｜公开业务问答
+    entry: https://henan.chinatax.gov.cn/zcwj/rdwd/
+    allowed_hosts:
+    - henan.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_henan
+    publisher: 国家税务总局河南省税务局
+    region: 河南
+    categories:
+    - tax
+    - practice
+    channel: qa
+    adapter: public_browser
+    profile:
+      schema_version: '1'
+      listing:
+        container: //ul[@class="listCon"]
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: browser_next
+        next: //ul[@class="pages"]/li[.="下一页"]
+        end_selector: //ul[@class="pages"]/li[.="下一页"][@class="pgNext pgEmpty"]
+      detail:
+        title: //meta[@name="ArticleTitle"]/@content
+        body: //*[@id="mainText"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+      browser:
+        wait_for: //ul[@class="pages"]/li[.="下一页"]
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。公开来源链接的协议、精确主机或端口未获许可
+    registry_version: '2026-11-06'
+  tax_guangdong_policy:
+    name: 国家税务总局广东省税务局｜政策文件
+    entry: https://guangdong.chinatax.gov.cn/gdsw/zxwj/zxwj.shtml
+    allowed_hosts:
+    - guangdong.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_guangdong
+    publisher: 国家税务总局广东省税务局
+    region: 广东
+    categories:
+    - tax
+    channel: policy
+    adapter: public_browser
+    profile:
+      schema_version: '1'
+      listing:
+        container: //*[@id="ajaxlist"]
+        items: ./ul/li
+        link: ./h4/a
+        title: ./h4/a/@title
+        date: ./h4/span
+      pagination:
+        mode: browser_next
+        next: //*[@id="ajaxpage"]/li[@class="next"]/a
+        end_selector: //*[@id="ajaxpage"]/li[@class="current"]/span
+        total_pages_selector: //*[@id="ajaxpage"]/li[@class="pagination_total"]/span
+        total_pages_format: article_pages
+      detail:
+        title: //meta[@name="ArticleTitle"]/@content
+        body: //*[@id="zoomcon"]
+        attachments:
+        - //html/body/div[4]/div/div/div[7]/ul/li/h4/a
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+      browser:
+        wait_for: //*[@id="ajaxpage"]/li[@class="pagination_total"]/span
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  tax_guangdong_interpretation:
+    name: 国家税务总局广东省税务局｜政策解读
+    entry: https://guangdong.chinatax.gov.cn/gdsw/wzjd/common_list.shtml
+    allowed_hosts:
+    - guangdong.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_guangdong
+    publisher: 国家税务总局广东省税务局
+    region: 广东
+    categories:
+    - tax
+    - practice
+    channel: interpretation
+    adapter: public_browser
+    profile:
+      schema_version: '1'
+      listing:
+        container: //*[@id="ajaxlist"]
+        items: ./ul/li
+        link: ./h4/a
+        title: ./h4/a/@title
+        date: ./h4/span
+      pagination:
+        mode: browser_next
+        next: //*[@id="ajaxpage"]/li[@class="next"]/a
+        end_selector: //*[@id="ajaxpage"]/li[@class="current"]/span
+        total_pages_selector: //*[@id="ajaxpage"]/li[@class="pagination_total"]/span
+        total_pages_format: article_pages
+      detail:
+        title: //meta[@name="ArticleTitle"]/@content
+        body: //*[@id="zoomcon"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+      browser:
+        wait_for: //*[@id="ajaxpage"]/li[@class="pagination_total"]/span
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  tax_guangdong_qa:
+    name: 国家税务总局广东省税务局｜公开业务问答
+    entry: https://guangdong.chinatax.gov.cn/gdsw/rdwd/rdwd_list.shtml
+    allowed_hosts:
+    - guangdong.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_guangdong
+    publisher: 国家税务总局广东省税务局
+    region: 广东
+    categories:
+    - tax
+    - practice
+    channel: qa
+    adapter: public_html
+    profile: {}
+    verification_status: blocked
+    verification_note: '2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：Actual
+      normal Chromium first/tail public list DOM synchronized successfully. The inspected
+      linked QA detail has #zoomcon/ucapcontent empty text and one PNG with no alt.
+      Original image/OCR content is not registered; cannot claim full readable answer
+      text.'
+    registry_version: '2026-11-06'
+  tax_guangxi_policy:
+    name: 国家税务总局广西壮族自治区税务局｜政策文件
+    entry: https://guangxi.chinatax.gov.cn/zcwj/zxwj/
+    allowed_hosts:
+    - guangxi.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_guangxi
+    publisher: 国家税务总局广西壮族自治区税务局
+    region: 广西
+    categories:
+    - tax
+    channel: policy
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //html/body/div[3]/div[3]/div/div[2]/ul
+        items: ./li[a]
+        link: ./a
+        title: ./a
+        date: ./span
+      pagination:
+        mode: template
+        template: index_{index}.html
+        total_pages_function: createPageHTML
+        total_pages_argument: 0
+      detail:
+        title: //meta[@name="ArticleTitle"]/@content
+        body: //*[@id="article-body"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  tax_guangxi_interpretation:
+    name: 国家税务总局广西壮族自治区税务局｜政策解读
+    entry: https://guangxi.chinatax.gov.cn/zcwj/zcjd/
+    allowed_hosts:
+    - guangxi.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_guangxi
+    publisher: 国家税务总局广西壮族自治区税务局
+    region: 广西
+    categories:
+    - tax
+    - practice
+    channel: interpretation
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //html/body/div[3]/div[3]/div/div[2]/ul
+        items: ./li[a]
+        link: ./a
+        title: ./a
+        date: ./span
+      pagination:
+        mode: template
+        template: index_{index}.html
+        total_pages_function: createPageHTML
+        total_pages_argument: 0
+      detail:
+        title: //meta[@name="ArticleTitle"]/@content
+        body: //*[@id="article-body"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  tax_guangxi_qa:
+    name: 国家税务总局广西壮族自治区税务局｜公开业务问答
+    entry: https://guangxi.chinatax.gov.cn/zcwj/rdwd/
+    allowed_hosts:
+    - guangxi.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_guangxi
+    publisher: 国家税务总局广西壮族自治区税务局
+    region: 广西
+    categories:
+    - tax
+    - practice
+    channel: qa
+    adapter: public_html
+    profile: {}
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：Actual
+      raw official QA list links observed recent answers directly to mp.weixin.qq.com.
+      No same-host answer detail/profile established; exact-host trust not widened.
+    registry_version: '2026-11-06'
+  tax_hainan_policy:
+    name: 国家税务总局海南省税务局｜政策文件
+    entry: https://hainan.chinatax.gov.cn/xxgk_6_1/
+    allowed_hosts:
+    - hainan.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_hainan
+    publisher: 国家税务总局海南省税务局
+    region: 海南
+    categories:
+    - tax
+    channel: policy
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //html/body/div[5]/div[2]/div/div/div[2]/div/div[2]/ul
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./em
+      pagination:
+        mode: template
+        template: index_{page}.html
+        total_pages_selector: //ul[@class="tCount"]/span[2]
+        total_pages_format: current_total
+      detail:
+        title: //meta[@name="ArticleTitle"]/@content
+        body: //*[@id="fontzoom"]
+        attachments:
+        - //html/body/div[5]/div[2]/div/div[2]/ul/ul/li[1]/a
+        - //html/body/div[5]/div[2]/div/div[2]/ul/ul/li[2]/a
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。来源请求失败（RemoteProtocolError）
+    registry_version: '2026-11-06'
+  tax_hainan_interpretation:
+    name: 国家税务总局海南省税务局｜政策解读
+    entry: https://hainan.chinatax.gov.cn/xxgk_6_3/
+    allowed_hosts:
+    - hainan.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_hainan
+    publisher: 国家税务总局海南省税务局
+    region: 海南
+    categories:
+    - tax
+    - practice
+    channel: interpretation
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //html/body/div[5]/div[2]/div/div/div[2]/div/div[2]/ul
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./em
+      pagination:
+        mode: template
+        template: index_{page}.html
+        total_pages_selector: //ul[@class="tCount"]/span[2]
+        total_pages_format: current_total
+      detail:
+        title: //meta[@name="ArticleTitle"]/@content
+        body: //*[@id="fontzoom"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。来源请求失败（RemoteProtocolError）
+    registry_version: '2026-11-06'
+  tax_hainan_qa:
+    name: 国家税务总局海南省税务局｜公开业务问答
+    entry: https://hainan.chinatax.gov.cn/gzcy_2_4/
+    allowed_hosts:
+    - hainan.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_hainan
+    publisher: 国家税务总局海南省税务局
+    region: 海南
+    categories:
+    - tax
+    - practice
+    channel: qa
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //html/body/div[5]/div[2]/div/div/div[2]/div/div[2]/ul
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./em
+      pagination:
+        mode: template
+        template: index_{page}.html
+        total_pages_selector: //ul[@class="tCount"]/span[2]
+        total_pages_format: current_total
+      detail:
+        title: //meta[@name="ArticleTitle"]/@content
+        body: //*[@id="fontzoom"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。来源请求失败（RemoteProtocolError）
+    registry_version: '2026-11-06'
+  tax_guizhou_policy:
+    name: 国家税务总局贵州省税务局｜政策文件
+    entry: https://guizhou.chinatax.gov.cn/wjjb/zcfgk/
+    allowed_hosts:
+    - guizhou.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_guizhou
+    publisher: 国家税务总局贵州省税务局
+    region: 贵州
+    categories:
+    - tax
+    channel: policy
+    adapter: public_html
+    profile: {}
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：Public
+      column shell reachable, but actual article list/rendering or finite pagination
+      not established
+    registry_version: '2026-11-06'
+  tax_guizhou_normative:
+    name: 国家税务总局贵州省税务局｜规范性文件
+    entry: https://guizhou.chinatax.gov.cn/wjjb/zcfgk/swgfzw/
+    allowed_hosts:
+    - guizhou.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_guizhou
+    publisher: 国家税务总局贵州省税务局
+    region: 贵州
+    categories:
+    - tax
+    channel: normative
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //html/body/div[2]/div[3]/div[2]/ul
+        items: ./li[a]
+        link: ./a
+        title: ./a/@title
+        date: ./a/span[4]
+      pagination:
+        mode: template
+        template: index_{index}.html
+        total_pages_function: createPageHTML
+        total_pages_argument: 0
+      detail:
+        title: //meta[@name="ArticleTitle"]/@content
+        body: //*[@id="Zoom"]
+        attachments:
+        - //html/body/div[8]/div[2]/div[1]/div[2]/div[1]/p[18]/a
+        - //html/body/div[8]/div[2]/div[1]/div[2]/div[1]/p[19]/a
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  tax_guizhou_interpretation:
+    name: 国家税务总局贵州省税务局｜政策解读
+    entry: https://guizhou.chinatax.gov.cn/wjjb/zcjd/
+    allowed_hosts:
+    - guizhou.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_guizhou
+    publisher: 国家税务总局贵州省税务局
+    region: 贵州
+    categories:
+    - tax
+    - practice
+    channel: interpretation
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //html/body/div[2]/div[3]/div[1]/ul
+        items: ./li[a]
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: template
+        template: index_{index}.html
+        total_pages_function: createPageHTML
+        total_pages_argument: 0
+      detail:
+        title: //meta[@name="ArticleTitle"]/@content
+        body: //*[@id="Zoom"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  tax_guizhou_qa:
+    name: 国家税务总局贵州省税务局｜公开业务问答
+    entry: https://guizhou.chinatax.gov.cn/wjjb/rdwd/
+    allowed_hosts:
+    - guizhou.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_guizhou
+    publisher: 国家税务总局贵州省税务局
+    region: 贵州
+    categories:
+    - tax
+    - practice
+    channel: qa
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //html/body/div[2]/div[3]/div[1]/ul
+        items: ./li[a]
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: template
+        template: index_{index}.html
+        total_pages_function: createPageHTML
+        total_pages_argument: 0
+      detail:
+        title: //meta[@name="ArticleTitle"]/@content
+        body: //*[@id="Zoom"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。公开来源链接的协议、精确主机或端口未获许可
+    registry_version: '2026-11-06'
+  tax_yunnan_policy:
+    name: 国家税务总局云南省税务局｜政策文件
+    entry: https://yunnan.chinatax.gov.cn/col/col7757/index.html
+    allowed_hosts:
+    - yunnan.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_yunnan
+    publisher: 国家税务总局云南省税务局
+    region: 云南
+    categories:
+    - tax
+    channel: policy
+    adapter: public_browser
+    profile:
+      schema_version: '1'
+      listing:
+        container: //ul[@class="right_clomn"]
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: browser_next
+        next: //a[@title="下一页"]
+        end_selector: //a[@title="下一页"][@disabled]
+      detail:
+        title: //*[@id="title"]
+        body: //*[@id="zoom"]
+        attachments:
+        - //html/body/div[2]/div/div[6]/div/div[3]/div[1]/p[17]/a
+        - //html/body/div[2]/div/div[6]/div/div[3]/div[1]/p[18]/a
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+      browser:
+        wait_for: //ul[@class="right_clomn"]/li
+        detail_wait_for: //*[@id="zoom"]/p[1]
+    verification_status: partial
+    verification_note: 2026-11-06 产品链路有界验证：PARTIAL。部分正文或关联附件未完成，见运行失败与恢复记录
+    registry_version: '2026-11-06'
+  tax_yunnan_interpretation:
+    name: 国家税务总局云南省税务局｜政策解读
+    entry: https://yunnan.chinatax.gov.cn/col/col3852/index.html
+    allowed_hosts:
+    - yunnan.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_yunnan
+    publisher: 国家税务总局云南省税务局
+    region: 云南
+    categories:
+    - tax
+    - practice
+    channel: interpretation
+    adapter: public_browser
+    profile:
+      schema_version: '1'
+      listing:
+        container: //ul[@class="right_clomn"]
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: browser_next
+        next: //a[@title="下页"]
+        end_selector: //a[@title="下页"][@disabled]
+      detail:
+        title: //*[@id="title"]
+        body: //*[@id="zoom"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+      browser:
+        wait_for: //ul[@class="right_clomn"]/li
+        detail_wait_for: //*[@id="zoom"]/p[1]
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  tax_yunnan_qa:
+    name: 国家税务总局云南省税务局｜公开业务问答
+    entry: https://yunnan.chinatax.gov.cn/col/col3855/index.html
+    allowed_hosts:
+    - yunnan.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_yunnan
+    publisher: 国家税务总局云南省税务局
+    region: 云南
+    categories:
+    - tax
+    - practice
+    channel: qa
+    adapter: public_browser
+    profile:
+      schema_version: '1'
+      listing:
+        container: //ul[@class="right_clomn"]
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: browser_next
+        next: //a[@title="下页"]
+        end_selector: //a[@title="下页"][@disabled]
+      detail:
+        title: //*[@id="title"]
+        body: //*[@id="zoom"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+      browser:
+        wait_for: //ul[@class="right_clomn"]/li
+        detail_wait_for: //*[@id="zoom"]/p[1]
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  tax_xizang_policy:
+    name: 国家税务总局西藏自治区税务局｜政策文件
+    entry: https://xizang.chinatax.gov.cn/col/col5350/index.html
+    allowed_hosts:
+    - xizang.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_xizang
+    publisher: 国家税务总局西藏自治区税务局
+    region: 西藏
+    categories:
+    - tax
+    channel: policy
+    adapter: public_browser
+    profile:
+      schema_version: '1'
+      listing:
+        container: //html/body/div[4]/div/div[2]/div[5]/div/div/div/ul/div/div/div/ul
+        items: ./li
+        link: ./a
+        title: ./a/@title
+      pagination:
+        mode: browser_next
+        next: //a[@title="下页"]
+        end_selector: //a[@title="下页"][@disabled]
+      detail:
+        title: //*[@id="title"]
+        body: //*[@id="zoom"]
+        attachments:
+        - //html/body/div[2]/div[3]/div/div[2]/div/p[18]/span/a
+        - //html/body/div[2]/div[3]/div/div[2]/div/p[19]/span[2]/a
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+      browser:
+        wait_for: //html/body/div[4]/div/div[2]/div[5]/div/div/div/ul/div/div/div/ul/li
+    verification_status: partial
+    verification_note: 2026-11-06 产品链路有界验证：PARTIAL。部分正文或关联附件未完成，见运行失败与恢复记录
+    registry_version: '2026-11-06'
+  tax_xizang_interpretation:
+    name: 国家税务总局西藏自治区税务局｜政策解读
+    entry: https://xizang.chinatax.gov.cn/col/col5346/index.html
+    allowed_hosts:
+    - xizang.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_xizang
+    publisher: 国家税务总局西藏自治区税务局
+    region: 西藏
+    categories:
+    - tax
+    - practice
+    channel: interpretation
+    adapter: public_browser
+    profile:
+      schema_version: '1'
+      listing:
+        container: //html/body/div[4]/div/div[2]/div[5]/div/div/div/ul/div/div/div/ul
+        items: ./li
+        link: ./a
+        title: ./a/@title
+      pagination:
+        mode: browser_next
+        next: //a[@title="下页"]
+        end_selector: //a[@title="下页"][@disabled]
+      detail:
+        title: //*[@id="title"]
+        body: //*[@id="zoom"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+      browser:
+        wait_for: //html/body/div[4]/div/div[2]/div[5]/div/div/div/ul/div/div/div/ul/li
+    verification_status: partial
+    verification_note: 2026-11-06 产品链路有界验证：PARTIAL。浏览器来源响应异常，HTTP 503
+    registry_version: '2026-11-06'
+  tax_xizang_qa:
+    name: 国家税务总局西藏自治区税务局｜公开业务问答
+    entry: https://xizang.chinatax.gov.cn/col/col5347/index.html
+    allowed_hosts:
+    - xizang.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_xizang
+    publisher: 国家税务总局西藏自治区税务局
+    region: 西藏
+    categories:
+    - tax
+    - practice
+    channel: qa
+    adapter: public_html
+    profile: {}
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：Actual
+      normal Chromium local QA list renders 24 entries, but all 24 observed article
+      hrefs point to mp.weixin.qq.com. No tax-bureau-hosted QA body discovered; exact-host
+      trust not widened.
+    registry_version: '2026-11-06'
+  tax_dalian_policy:
+    name: 国家税务总局大连市税务局｜政策文件
+    entry: https://dalian.chinatax.gov.cn/col/col2134/index.html
+    allowed_hosts:
+    - dalian.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_dalian
+    publisher: 国家税务总局大连市税务局
+    region: 大连
+    categories:
+    - tax
+    channel: policy
+    adapter: public_html
+    profile: {}
+    verification_status: blocked
+    verification_note: '2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：Actual
+      normal private Chromium HTTPS channel probe failed: HTTP 510; no access-control
+      bypass attempted.'
+    registry_version: '2026-11-06'
+  tax_dalian_interpretation:
+    name: 国家税务总局大连市税务局｜政策解读
+    entry: https://dalian.chinatax.gov.cn/col/col2948/index.html
+    allowed_hosts:
+    - dalian.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_dalian
+    publisher: 国家税务总局大连市税务局
+    region: 大连
+    categories:
+    - tax
+    - practice
+    channel: interpretation
+    adapter: public_html
+    profile: {}
+    verification_status: blocked
+    verification_note: '2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：Actual
+      normal private Chromium HTTPS channel probe failed: HTTP 510; no access-control
+      bypass attempted.'
+    registry_version: '2026-11-06'
+  tax_dalian_qa:
+    name: 国家税务总局大连市税务局｜公开业务问答
+    entry: https://dalian.chinatax.gov.cn/col/col2843/index.html
+    allowed_hosts:
+    - dalian.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_dalian
+    publisher: 国家税务总局大连市税务局
+    region: 大连
+    categories:
+    - tax
+    - practice
+    channel: qa
+    adapter: public_html
+    profile: {}
+    verification_status: blocked
+    verification_note: '2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：Actual
+      normal private Chromium HTTPS channel probe failed: HTTP 510; no access-control
+      bypass attempted.'
+    registry_version: '2026-11-06'
+  tax_qingdao_policy:
+    name: 国家税务总局青岛市税务局｜政策文件
+    entry: https://qingdao.chinatax.gov.cn/ssfg2019/zxwj/
+    allowed_hosts:
+    - qingdao.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_qingdao
+    publisher: 国家税务总局青岛市税务局
+    region: 青岛
+    categories:
+    - tax
+    channel: policy
+    adapter: public_html
+    profile: {}
+    verification_status: blocked
+    verification_note: '2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：Actual
+      normal private Chromium HTTPS channel probe failed: HTTP 412; no access-control
+      bypass attempted.'
+    registry_version: '2026-11-06'
+  tax_qingdao_interpretation:
+    name: 国家税务总局青岛市税务局｜政策解读
+    entry: https://qingdao.chinatax.gov.cn/ssfg2019/zcjd/
+    allowed_hosts:
+    - qingdao.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: tax_qingdao
+    publisher: 国家税务总局青岛市税务局
+    region: 青岛
+    categories:
+    - tax
+    - practice
+    channel: interpretation
+    adapter: public_html
+    profile: {}
+    verification_status: blocked
+    verification_note: '2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：Actual
+      normal private Chromium HTTPS channel probe failed: HTTP 412; no access-control
+      bypass attempted.'
+    registry_version: '2026-11-06'
+  tax_shenzhen_policy:
+    name: 国家税务总局深圳市税务局｜政策文件
+    entry: https://shenzhen.chinatax.gov.cn/sztax/zcwj/zxwj/zxwj_list.shtml
+    allowed_hosts:
+    - shenzhen.chinatax.gov.cn
+    listing_date_kind: column_publication_date
+    authority_id: tax_shenzhen
+    publisher: 国家税务总局深圳市税务局
+    region: 深圳
+    categories:
+    - tax
+    channel: policy
+    adapter: public_browser
+    profile:
+      schema_version: '1'
+      listing:
+        container: //div[@class="pageList infoList listContent"]
+        items: ./ul/li
+        link: ./h4/a
+        title: ./h4/a/@title
+        date: ./h4/span
+      pagination:
+        mode: template
+        template: zxwj_list_{page}.shtml
+        total_pages_function: createPageHTML
+        total_pages_argument: 1
+      detail:
+        title: //*[@id="title"]
+        body: //*[@id="zoomcon"]
+        attachments:
+        - //html/body/div[4]/div/div/div[5]/ucapcontent/div/p[19]/span/span/a
+        - //html/body/div[4]/div/div/div[5]/ucapcontent/div/p[20]/span/a
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+      browser:
+        wait_for: //div[@class="pageList infoList listContent"]
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。列表无条目且没有明确空结果证据
+    registry_version: '2026-11-06'
+  tax_shenzhen_interpretation:
+    name: 国家税务总局深圳市税务局｜政策解读
+    entry: https://shenzhen.chinatax.gov.cn/sztax/zcwj/zcjd/common_list.shtml
+    allowed_hosts:
+    - shenzhen.chinatax.gov.cn
+    listing_date_kind: column_publication_date
+    authority_id: tax_shenzhen
+    publisher: 国家税务总局深圳市税务局
+    region: 深圳
+    categories:
+    - tax
+    - practice
+    channel: interpretation
+    adapter: public_browser
+    profile:
+      schema_version: '1'
+      listing:
+        container: //div[@class="pageList infoList listContent"]
+        items: ./ul/li
+        link: ./h4/a
+        title: ./h4/a/@title
+        date: ./h4/span
+      pagination:
+        mode: template
+        template: common_list_{page}.shtml
+        total_pages_function: createPageHTML
+        total_pages_argument: 1
+      detail:
+        title: //*[@id="title"]
+        body: //*[@id="zoomcon"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+      browser:
+        wait_for: //div[@class="pageList infoList listContent"]
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。浏览器来源响应异常，HTTP 503
+    registry_version: '2026-11-06'
+  tax_shenzhen_qa:
+    name: 国家税务总局深圳市税务局｜公开业务问答
+    entry: https://shenzhen.chinatax.gov.cn/sztax/zcwj/rdwd/common_list.shtml
+    allowed_hosts:
+    - shenzhen.chinatax.gov.cn
+    listing_date_kind: column_publication_date
+    authority_id: tax_shenzhen
+    publisher: 国家税务总局深圳市税务局
+    region: 深圳
+    categories:
+    - tax
+    - practice
+    channel: qa
+    adapter: public_browser
+    profile:
+      schema_version: '1'
+      listing:
+        container: //div[@class="pageList infoList listContent"]
+        items: ./ul/li
+        link: ./h4/a
+        title: ./h4/a/@title
+        date: ./h4/span
+      pagination:
+        mode: template
+        template: common_list_{page}.shtml
+        total_pages_function: createPageHTML
+        total_pages_argument: 1
+      detail:
+        title: //*[@id="title"]
+        body: //*[@id="zoomcon"]
+        attachments: []
+        related_links: []
+        published_date: //meta[@name="PubDate"]/@content
+      browser:
+        wait_for: //div[@class="pageList infoList listContent"]
+    verification_status: partial
+    verification_note: 2026-11-06 产品链路有界验证：PARTIAL。列表无条目且没有明确空结果证据
+    registry_version: '2026-11-06'
+  mof_tfs_rules:
+    name: 财政部条法司｜财政部令
+    entry: https://tfs.mof.gov.cn/caizhengbuling/
+    allowed_hosts:
+    - tfs.mof.gov.cn
+    listing_date_kind: column_publication_date
+    authority_id: mof
+    publisher: 中华人民共和国财政部
+    region: 全国
+    categories:
+    - fiscal
+    - law
+    channel: normative
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //ul[@class="liBox"]
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: template
+        template: index_{index}.htm
+        total_pages_variable: countPage
+      detail:
+        title: //h2[@class="title_con"]
+        body: //div[@class="my_doccontent"]/div[@class="TRS_Editor"]
+        published_date: //meta[@name="PubDate"]/@content
+        source_publisher: //meta[@name="ContentSource"]/@content
+        attachments:
+        - //*[@id="appendix1"]//a[@href]
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  mof_asset_policy:
+    name: 财政部资产管理司｜政策通知
+    entry: https://zcgls.mof.gov.cn/zhengcefabu/
+    allowed_hosts:
+    - zcgls.mof.gov.cn
+    listing_date_kind: column_publication_date
+    authority_id: mof
+    publisher: 中华人民共和国财政部
+    region: 全国
+    categories:
+    - fiscal
+    channel: policy
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //ul[@class="liBox"]
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: template
+        template: index_{index}.htm
+        total_pages_variable: countPage
+      detail:
+        title: //h2[@class="title_con"]
+        body: //div[@class="my_doccontent"]/div[@class="TRS_Editor"]
+        published_date: //meta[@name="PubDate"]/@content
+        source_publisher: //meta[@name="ContentSource"]/@content
+        attachments:
+        - //*[@id="appendix1"]//a[@href]
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  mof_environment_policy:
+    name: 财政部资环司｜政策发布
+    entry: https://zyhj.mof.gov.cn/zcfb/
+    allowed_hosts:
+    - zyhj.mof.gov.cn
+    listing_date_kind: column_publication_date
+    authority_id: mof
+    publisher: 中华人民共和国财政部
+    region: 全国
+    categories:
+    - fiscal
+    channel: policy
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //ul[@class="liBox"]
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: template
+        template: index_{index}.htm
+        total_pages_variable: countPage
+      detail:
+        title: //h2[@class="title_con"]
+        body: //div[@class="my_doccontent"]/div[@class="TRS_Editor"]
+        published_date: //meta[@name="PubDate"]/@content
+        source_publisher: //meta[@name="ContentSource"]/@content
+        attachments:
+        - //*[@id="appendix1"]//a[@href]
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  mof_accounting_policy:
+    name: 财政部会计司｜政策发布
+    entry: https://kjs.mof.gov.cn/zhengcefabu/
+    allowed_hosts:
+    - kjs.mof.gov.cn
+    listing_date_kind: column_publication_date
+    authority_id: mof
+    publisher: 中华人民共和国财政部
+    region: 全国
+    categories:
+    - accounting
+    channel: policy
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //ul[@class="liBox"]
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: template
+        template: index_{index}.htm
+        total_pages_variable: countPage
+      detail:
+        title: //h2[@class="title_con"]
+        body: //div[@class="my_doccontent"]/div[@class="TRS_Editor"]
+        published_date: //meta[@name="PubDate"]/@content
+        source_publisher: //meta[@name="ContentSource"]/@content
+        attachments:
+        - //*[@id="appendix1"]//a[@href]
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  mof_interpretation_index:
+    name: 财政部｜政策解读聚合
+    entry: https://www.mof.gov.cn/zhengwuxinxi/zhengcejiedu/
+    allowed_hosts:
+    - www.mof.gov.cn
+    listing_date_kind: unknown
+    authority_id: mof
+    publisher: 中华人民共和国财政部
+    region: 全国
+    categories:
+    - fiscal
+    - practice
+    channel: interpretation
+    adapter: public_html
+    profile: {}
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：实际聚合栏目已读；文种混有发布消息，待配置及逐样本核正文/分页。
+    registry_version: '2026-11-06'
+  mof_tfs_interpretation:
+    name: 财政部条法司｜制度解读
+    entry: https://tfs.mof.gov.cn/zhengcejiedu/
+    allowed_hosts:
+    - tfs.mof.gov.cn
+    listing_date_kind: column_publication_date
+    authority_id: mof
+    publisher: 中华人民共和国财政部
+    region: 全国
+    categories:
+    - fiscal
+    - practice
+    channel: interpretation
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //ul[@class="liBox"]
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: template
+        template: index_{index}.htm
+        total_pages_variable: countPage
+      detail:
+        title: //h2[@class="title_con"]
+        body: //div[@class="my_doccontent"]/div[@class="TRS_Editor"]
+        published_date: //meta[@name="PubDate"]/@content
+        source_publisher: //meta[@name="ContentSource"]/@content
+        attachments:
+        - //*[@id="appendix1"]//a[@href]
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  csrc_orders:
+    name: 证监会｜证监会令
+    entry: https://www.csrc.gov.cn/csrc/c101953/zfxxgk_zdgk.shtml
+    allowed_hosts:
+    - www.csrc.gov.cn
+    listing_date_kind: unknown
+    authority_id: csrc
+    publisher: 中国证券监督管理委员会
+    region: 全国
+    categories:
+    - securities
+    - law
+    channel: normative
+    adapter: public_browser
+    profile: {}
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：DYNAMIC_SCOPE_UNRESOLVED：2026-11-06正常受守卫浏览器HTTP200且已见全站公开信息DOM，但明确等证监会令专属href、再正常UI点击证监会令两轮有界验证均未得到稳定目标列表。不能将初始全站6511页误当令栏目；需要开发/验证正确UI范围与分页，非据此断言网站必须登录/全站不可访问。证据csrc-orders-scoped-probe.json与csrc-orders-click-probe.json。
+    registry_version: '2026-11-06'
+  csrc_announcements:
+    name: 证监会｜证监会公告
+    entry: https://www.csrc.gov.cn/csrc/c101954/zfxxgk_zdgk.shtml
+    allowed_hosts:
+    - www.csrc.gov.cn
+    listing_date_kind: unknown
+    authority_id: csrc
+    publisher: 中国证券监督管理委员会
+    region: 全国
+    categories:
+    - securities
+    channel: policy
+    adapter: public_browser
+    profile: {}
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：主站真实栏目入口；静态栏目页返回政府信息公开外壳，未配置可见列表及分页。
+    registry_version: '2026-11-06'
+  csrc_interpretation:
+    name: 证监会｜政策解读
+    entry: https://www.csrc.gov.cn/csrc/c100039/common_list.shtml
+    allowed_hosts:
+    - www.csrc.gov.cn
+    listing_date_kind: column_publication_date
+    authority_id: csrc
+    publisher: 中国证券监督管理委员会
+    region: 全国
+    categories:
+    - securities
+    - practice
+    channel: interpretation
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //ul[@id="list"]
+        items: ./li
+        link: ./a
+        date: ./span
+      pagination:
+        mode: template
+        template: common_list_{page}.shtml
+        total_pages_function: createPageHTML
+        total_pages_argument: 1
+      detail:
+        title: //div[@class="content"]//h2
+        body: //div[@class="detail-news"]
+        published_date: //meta[@name="PubDate"]/@content
+        source_publisher: //meta[@name="ContentSource"]/@content
+        attachments:
+        - //div[@class="detail-news"]//a[@href]
+        related_links:
+        - //div[@class="detail-news"]//a[@href]
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  csrc_guidance:
+    name: 证监会｜监管规则适用指引
+    entry: https://www.csrc.gov.cn/csrc/c105948/zfxxgk_zdgk.shtml?channelid=a646cc4ea60542d081bd38eab9494c92
+    allowed_hosts:
+    - www.csrc.gov.cn
+    listing_date_kind: unknown
+    authority_id: csrc
+    publisher: 中国证券监督管理委员会
+    region: 全国
+    categories:
+    - securities
+    - practice
+    channel: policy
+    adapter: public_browser
+    profile: {}
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：精确链接来自证监会主站导航，保留完整channelid；尚未读该栏实际列表/代表正文，profile留空。
+    registry_version: '2026-11-06'
+  csrc_legal_database:
+    name: 证监会｜法规系统
+    entry: https://neris.csrc.gov.cn/falvfagui/
+    allowed_hosts:
+    - neris.csrc.gov.cn
+    listing_date_kind: unknown
+    authority_id: csrc
+    publisher: 中国证券监督管理委员会
+    region: 全国
+    categories:
+    - securities
+    - law
+    channel: normative
+    adapter: public_browser
+    profile: {}
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：实际只读到导航及{{link.name}}模板；不可用此视为法规正文或空结果。
+    registry_version: '2026-11-06'
+  npc_law_database:
+    name: 全国人大｜国家法律法规数据库
+    entry: https://flk.npc.gov.cn/search
+    allowed_hosts:
+    - flk.npc.gov.cn
+    listing_date_kind: unknown
+    authority_id: npc
+    publisher: 全国人大常委会办公厅
+    region: 全国
+    categories:
+    - law
+    channel: normative
+    adapter: public_browser
+    profile: {}
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：网页工具403，人大官网及PDF代表样本TLS/超时；搜索索引摘要不作正文核验，未猜详情接口。
+    registry_version: '2026-11-06'
+  gov_policy_library:
+    name: 国务院政策文件库
+    entry: https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary
+    allowed_hosts:
+    - sousuo.www.gov.cn
+    listing_date_kind: unknown
+    authority_id: state_council
+    publisher: 国务院
+    region: 全国
+    categories:
+    - fiscal
+    - law
+    channel: policy
+    adapter: public_browser
+    profile: {}
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：实际GET200但只有app容器和前端脚本；检索结果、正文跳转及分页均未核，不按空列表处理。
+    registry_version: '2026-11-06'
+  gov_administrative_regulations:
+    name: 中国政府网｜国家行政法规库
+    entry: https://www.gov.cn/zhengce/xzfgk/
+    allowed_hosts:
+    - www.gov.cn
+    listing_date_kind: unknown
+    authority_id: state_council
+    publisher: 国务院
+    region: 全国
+    categories:
+    - law
+    channel: normative
+    adapter: public_browser
+    profile: {}
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：公开网页工具403；与司法部同步库相关，不能因镜像可读就认定本入口可采。
+    registry_version: '2026-11-06'
+  moj_administrative_regulations:
+    name: 司法部｜国家行政法规库
+    entry: https://xzfg.moj.gov.cn/search2.html?PageIndex=1
+    allowed_hosts:
+    - xzfg.moj.gov.cn
+    listing_date_kind: promulgation_date
+    authority_id: state_council
+    publisher: 司法部
+    region: 全国
+    categories:
+    - law
+    channel: normative
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //ul[@class="searching-results-list"]
+        items: ./li
+        link: ./div[@class="list-item-body"]/div[@class="col-left"]/div[@class="title"]/span/a
+        date: ./div[@class="list-item-body"]/div[@class="col-left"]/ul[@class="info-list"]/li[@class="publish-date"]
+      pagination:
+        mode: query
+        query_parameter: PageIndex
+        total_pages_selector: //input[@id="page-count"]/@value
+      detail:
+        title: //div[@class="text-title"]
+        body: //div[@class="law-chapter"]
+        attachments:
+        - //div[@class="text-top"]//a[@href]
+        primary_attachments:
+        - //div[@class="text-top"]//a[@href]
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  mof_gks_rules:
+    name: 财政部国库司｜规章制度
+    entry: https://gks.mof.gov.cn/guizhangzhidu/
+    allowed_hosts:
+    - gks.mof.gov.cn
+    listing_date_kind: column_publication_date
+    authority_id: mof
+    publisher: 中华人民共和国财政部
+    region: 全国
+    categories:
+    - fiscal
+    channel: normative
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //ul[@class="liBox"]
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: template
+        template: index_{index}.htm
+        total_pages_variable: countPage
+      detail:
+        title: //h2[@class="title_con"]
+        body: //div[@class="my_doccontent"]/div[@class="TRS_Editor"]
+        published_date: //meta[@name="PubDate"]/@content
+        source_publisher: //meta[@name="ContentSource"]/@content
+        attachments:
+        - //*[@id="appendix1"]//a[@href]
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  mof_yss_policy:
+    name: 财政部预算司｜政策规章
+    entry: https://yss.mof.gov.cn/zhengceguizhang/
+    allowed_hosts:
+    - yss.mof.gov.cn
+    listing_date_kind: column_publication_date
+    authority_id: mof
+    publisher: 中华人民共和国财政部
+    region: 全国
+    categories:
+    - fiscal
+    channel: policy
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //ul[@class="liBox"]
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: template
+        template: index_{index}.htm
+        total_pages_variable: countPage
+      detail:
+        title: //h2[@class="title_con"]
+        body: //div[@class="my_doccontent"]/div[@class="TRS_Editor"]
+        published_date: //meta[@name="PubDate"]/@content
+        source_publisher: //meta[@name="ContentSource"]/@content
+        attachments:
+        - //*[@id="appendix1"]//a[@href]
+    verification_status: partial
+    verification_note: 2026-11-06 产品链路有界验证：PARTIAL。部分正文或关联附件未完成，见运行失败与恢复记录
+    registry_version: '2026-11-06'
+  mof_jrs_notices:
+    name: 财政部金融司｜工作通知
+    entry: https://jrs.mof.gov.cn/gongzuotongzhi/
+    allowed_hosts:
+    - jrs.mof.gov.cn
+    listing_date_kind: column_publication_date
+    authority_id: mof
+    publisher: 中华人民共和国财政部
+    region: 全国
+    categories:
+    - fiscal
+    channel: policy
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //ul[@class="liBox"]
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: template
+        template: index_{index}.htm
+        total_pages_variable: countPage
+      detail:
+        title: //h2[@class="title_con"]
+        body: //div[@class="my_doccontent"]/div[@class="TRS_Editor"]
+        published_date: //meta[@name="PubDate"]/@content
+        source_publisher: //meta[@name="ContentSource"]/@content
+        attachments:
+        - //*[@id="appendix1"]//a[@href]
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  mof_jrs_interpretation:
+    name: 财政部金融司｜政策解读
+    entry: https://jrs.mof.gov.cn/zhengcejiedu/
+    allowed_hosts:
+    - jrs.mof.gov.cn
+    listing_date_kind: column_publication_date
+    authority_id: mof
+    publisher: 中华人民共和国财政部
+    region: 全国
+    categories:
+    - fiscal
+    - practice
+    channel: interpretation
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //ul[@class="liBox"]
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: template
+        template: index_{index}.htm
+        total_pages_variable: countPage
+      detail:
+        title: //h2[@class="title_con"]
+        body: //div[@class="my_doccontent"]/div[@class="TRS_Editor"]
+        published_date: //meta[@name="PubDate"]/@content
+        source_publisher: //meta[@name="ContentSource"]/@content
+        attachments:
+        - //*[@id="appendix1"]//a[@href]
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  mof_zhs_policy:
+    name: 财政部综合司｜政策发布
+    entry: https://zhs.mof.gov.cn/zhengcefabu/
+    allowed_hosts:
+    - zhs.mof.gov.cn
+    listing_date_kind: column_publication_date
+    authority_id: mof
+    publisher: 中华人民共和国财政部
+    region: 全国
+    categories:
+    - fiscal
+    channel: policy
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //ul[@class="liBox"]
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: template
+        template: index_{index}.htm
+        total_pages_variable: countPage
+      detail:
+        title: //h2[@class="title_con"]
+        body: //div[@class="my_doccontent"]/div[@class="TRS_Editor"]
+        published_date: //meta[@name="PubDate"]/@content
+        source_publisher: //meta[@name="ContentSource"]/@content
+        attachments:
+        - //*[@id="appendix1"]//a[@href]
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  mof_jjs_policy:
+    name: 财政部经济建设司｜政策发布
+    entry: https://jjs.mof.gov.cn/zhengcefagui/
+    allowed_hosts:
+    - jjs.mof.gov.cn
+    listing_date_kind: column_publication_date
+    authority_id: mof
+    publisher: 中华人民共和国财政部
+    region: 全国
+    categories:
+    - fiscal
+    channel: policy
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //ul[@class="liBox"]
+        items: ./li
+        link: ./a
+        title: ./a
+        date: ./span
+      pagination:
+        mode: template
+        template: index_{index}.htm
+        total_pages_variable: countPage
+      detail:
+        title: //h2[@class="title_con"]
+        body: //div[@class="my_doccontent"]/div[@class="TRS_Editor"]
+        published_date: //meta[@name="PubDate"]/@content
+        source_publisher: //meta[@name="ContentSource"]/@content
+        attachments:
+        - //*[@id="appendix1"]//a[@href]
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  mof_sbs_policy:
+    name: 财政部社会保障司｜政策发布
+    entry: https://sbs.mof.gov.cn/zhengcefabu/
+    allowed_hosts:
+    - sbs.mof.gov.cn
+    listing_date_kind: column_publication_date
+    authority_id: mof
+    publisher: 中华人民共和国财政部
+    region: 全国
+    categories:
+    - fiscal
+    channel: policy
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //ul[@class="liBox"]
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: template
+        template: index_{index}.htm
+        total_pages_variable: countPage
+      detail:
+        title: //h2[@class="title_con"]
+        body: //div[@class="my_doccontent"]/div[@class="TRS_Editor"]
+        published_date: //meta[@name="PubDate"]/@content
+        source_publisher: //meta[@name="ContentSource"]/@content
+        attachments:
+        - //*[@id="appendix1"]//a[@href]
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  mof_nys_rules:
+    name: 财政部农业农村司｜通知规定
+    entry: https://nys.mof.gov.cn/czpjZhengCeFaBu_2_2/
+    allowed_hosts:
+    - nys.mof.gov.cn
+    listing_date_kind: column_publication_date
+    authority_id: mof
+    publisher: 中华人民共和国财政部
+    region: 全国
+    categories:
+    - fiscal
+    channel: policy
+    adapter: public_html
+    profile:
+      schema_version: '1'
+      listing:
+        container: //ul[@class="liBox"]
+        items: ./li
+        link: ./a
+        title: ./a/@title
+        date: ./span
+      pagination:
+        mode: template
+        template: index_{index}.htm
+        total_pages_variable: countPage
+      detail:
+        title: //h2[@class="title_con"]
+        body: //div[@class="my_doccontent"]/div[@class="TRS_Editor"]
+        published_date: //meta[@name="PubDate"]/@content
+        source_publisher: //meta[@name="ContentSource"]/@content
+        attachments:
+        - //*[@id="appendix1"]//a[@href]
+    verification_status: pass
+    verification_note: 2026-11-06 产品链路有界验证：PASS。有界列表、选定正文与所见附件已存证；资料仍待使用者复核
+    registry_version: '2026-11-06'
+  mof_jkw_policy:
+    name: 财政部科教和文化司｜政策发布
+    entry: https://jkw.mof.gov.cn/zhengcefabu/
+    allowed_hosts:
+    - jkw.mof.gov.cn
+    listing_date_kind: column_publication_date
+    authority_id: mof
+    publisher: 中华人民共和国财政部
+    region: 全国
+    categories:
+    - fiscal
+    channel: policy
+    adapter: public_html
+    profile: {}
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：2026-11-06真实官网导航发现入口；代表请求TransientFailure，未绕过。具体证据phase3-observations.json，未形成profile。
+    registry_version: '2026-11-06'
+  mof_jkw_interpretation:
+    name: 财政部科教和文化司｜政策解读
+    entry: https://jkw.mof.gov.cn/zhengcejiedu/
+    allowed_hosts:
+    - jkw.mof.gov.cn
+    listing_date_kind: column_publication_date
+    authority_id: mof
+    publisher: 中华人民共和国财政部
+    region: 全国
+    categories:
+    - fiscal
+    - practice
+    channel: interpretation
+    adapter: public_html
+    profile: {}
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：列表/代表正文已经真实捕获且单页内容可解析，但列表中存在未登记的www.mof.gov.cn与www.moe.gov.cn跨站文档链接；精确主机门禁保留，未扩主机，需经根配置维护者核来源边界后再启用。
+    registry_version: '2026-11-06'
+  sat_text_interpretation:
+    name: 国家税务总局｜文字政策解读
+    entry: https://fgk.chinatax.gov.cn/zcfgk/c100015/list_zcjd.html
+    allowed_hosts:
+    - fgk.chinatax.gov.cn
+    - www.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: chinatax
+    publisher: 国家税务总局
+    region: 全国
+    categories:
+    - tax
+    - practice
+    channel: interpretation
+    adapter: public_browser
+    profile: {}
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：DYNAMIC_RENDER_PENDING：总局首页真实HTML导航及脚本fgk映射确认栏目，2026-11-06正常守卫浏览器原始HTTP200，但ul.list为空、body可见加载15秒超时；缺可运行列表/分页profile。不是HTTP403，也没有登录墙证据。原件sat-interpretation-original-1.bin，探针sat-interpretation-browser-probe.json。
+    registry_version: '2026-11-06'
+  sat_12366_tax_guide:
+    name: 税费服务平台｜办税指南
+    entry: https://12366.chinatax.gov.cn/bsznBLH/main
+    allowed_hosts:
+    - 12366.chinatax.gov.cn
+    listing_date_kind: unknown
+    authority_id: chinatax_12366
+    publisher: 国家税务总局
+    region: 全国
+    categories:
+    - tax
+    - practice
+    channel: guidance
+    adapter: public_browser
+    profile: {}
+    verification_status: blocked
+    verification_note: 2026-11-06 产品链路有界验证：BLOCKED。来源profile未完整登记或含不允许的规则，禁止全页兜底；栏目核验：HTTP_ACCESS_BLOCKED_AND_DYNAMIC_PROFILE_MISSING：官网真实专用栏目入口；2026-11-06原BoundedClient两请求HTTP403未绕过；独立公开网页读取能见办税指南目录/标题/类别/时间壳但无文档数据，默认地区北京市。需要正常浏览器地域选择/列表/分页/正文验证，不能称全国统一资料或登录墙；证据12366-observations.json与sat-public-navigation-notes.md。
+    registry_version: '2026-11-06'

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 from contextlib import closing
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
@@ -18,7 +18,14 @@ from ftr.models import DecisionRequest, DocumentRecord, SemanticDecision, digest
 from ftr.repository import Repository
 from ftr.rules import atomic_json
 from ftr.runtime import BudgetReached, data_lock
-from ftr.scheduler import SOURCES, initial_state, read_states, window
+from ftr.schedule_plan import (
+    ScheduleScope,
+    legacy_scope,
+    merge_pending,
+    parse_plan_payload,
+    stored_scope,
+)
+from ftr.scheduler import initial_state, read_states, window
 
 
 class Command(BaseModel):
@@ -38,17 +45,21 @@ class Command(BaseModel):
         "review.recover",
     ]
     expected_revision: int = Field(default=0, ge=0, strict=True)
+    scope_digest: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     payload: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def constrained(self):
+        if self.scope_digest is not None and self.action not in ("plan.save", "plan.now"):
+            raise ValueError("来源预览摘要只用于计划保存或本轮获取")
         if self.action == "knowledge.apply":
             from ftr.knowledge.commands import Operation
 
             Operation.model_validate(self.payload).checked()
             return self
         allowed = {
-            "plan.save": set(SchedulerSettings.model_fields),
+            "plan.save": set(SchedulerSettings.model_fields)
+            | {"schema_version", "settings", "scope"},
             "plan.enable": set(),
             "plan.disable": set(),
             "plan.now": {"sources", "date_from", "date_to", "slot"},
@@ -62,9 +73,9 @@ class Command(BaseModel):
         if set(self.payload) - allowed[self.action]:
             raise ValueError("操作包含未允许的参数")
         if self.action == "plan.save":
-            SchedulerSettings.model_validate(self.payload)
-        if self.action.startswith("source.") and self.payload.get("source_id") not in SOURCES:
-            raise ValueError("来源不在登记范围内")
+            parse_plan_payload(self.payload, validate_registered=False)
+        if self.action.startswith("source."):
+            ScheduleScope(source_ids=[self.payload.get("source_id")])
         if self.action.startswith("review."):
             if not isinstance(self.payload.get("record_id"), str) or not self.payload.get(
                 "input_digest"
@@ -82,14 +93,15 @@ class Command(BaseModel):
                 if self.action == "review.submit" and not any(x.strip() for x in reasons):
                     raise ValueError("提交结论必须填写理由")
         if self.action == "plan.now":
-            from ftr.models import TaskRequest
-
-            sources = self.payload.get("sources")
-            TaskRequest(
-                source_ids=sources,
-                date_from=self.payload.get("date_from"),
-                date_to=self.payload.get("date_to"),
-            )
+            ScheduleScope(source_ids=self.payload.get("sources"))
+            if not all(
+                isinstance(self.payload.get(key), str) for key in ("date_from", "date_to", "slot")
+            ):
+                raise ValueError("本轮窗口须包含起止日期与带时区时点")
+            if date.fromisoformat(self.payload["date_from"]) > date.fromisoformat(
+                self.payload["date_to"]
+            ):
+                raise ValueError("date_from 不能晚于 date_to")
             if datetime.fromisoformat(self.payload["slot"]).tzinfo is None:
                 raise ValueError("本轮时点须包含时区")
         return self
@@ -105,10 +117,13 @@ def _table(db, name):
 
 def effective_plan(root: Path, defaults: SchedulerSettings | None = None) -> dict:
     result = {
+        "schema_version": "2",
         "revision": 0,
         "applied_revision": 0,
         "config_source": "yaml_default",
         "settings": (defaults or SchedulerSettings()).model_dump(mode="json"),
+        "scope": legacy_scope().model_dump(),
+        "source_snapshot": {},
     }
     completed = set()
     if (root / "database.sqlite3").exists():
@@ -116,11 +131,14 @@ def effective_plan(root: Path, defaults: SchedulerSettings | None = None) -> dic
             if _table(repo.db, "managed_plan"):
                 row = repo.db.execute("SELECT * FROM managed_plan WHERE id=1").fetchone()
                 if row:
+                    scope, snapshot = stored_scope(row)
                     result.update(
                         revision=row["revision"],
                         applied_revision=row["applied_revision"],
                         config_source="persistent_local_plan",
                         settings=json.loads(row["settings_json"]),
+                        scope=scope.model_dump(),
+                        source_snapshot=snapshot,
                     )
             if _table(repo.db, "management_operations"):
                 completed = {
@@ -133,7 +151,7 @@ def effective_plan(root: Path, defaults: SchedulerSettings | None = None) -> dic
     ):
         if path.is_symlink() or path.stem in completed:
             continue
-        command = Command.model_validate_json(path.read_text())
+        command, _context = read_queued(path)
         if (
             command.action in ("plan.save", "plan.enable", "plan.disable")
             and command.expected_revision == result["revision"]
@@ -195,13 +213,63 @@ def enqueue(root: Path, command: Command) -> dict:
         if path.is_symlink():
             raise ValueError("命令路径无效")
         if path.exists():
-            existing = Command.model_validate_json(path.read_text())
+            existing, _context = read_queued(path)
             if existing != command:
                 raise Conflict("相同操作 ID 对应不同输入")
         else:
-            atomic_json(path, command.model_dump(mode="json"))
+            context: dict[str, Any] = {}
+            if command.action.startswith("source."):
+                from ftr.sources import validate_source_ids
+
+                validate_source_ids([command.payload["source_id"]])
+            if command.action.startswith("plan.") and command.action != "plan.disable":
+                from ftr.sources import snapshot_digest, source_snapshot
+
+                saved = effective_plan(root)
+                scope = ScheduleScope.model_validate(saved["scope"])
+                if command.action == "plan.save":
+                    scope = parse_plan_payload(command.payload, scope).scope
+                elif command.action == "plan.now":
+                    scope = ScheduleScope(source_ids=command.payload["sources"])
+                context = {
+                    "scope": scope.model_dump(),
+                    "source_snapshot": (
+                        saved["source_snapshot"]
+                        if command.scope_digest is None
+                        and command.action != "plan.now"
+                        and scope.model_dump() == saved["scope"]
+                        and saved["source_snapshot"]
+                        else source_snapshot(scope.source_ids)
+                    ),
+                    "plan_revision": command.expected_revision,
+                }
+                if command.scope_digest is not None and command.scope_digest != snapshot_digest(
+                    context["source_snapshot"]
+                ):
+                    raise Conflict("来源登记已变化，请重新预览栏目范围")
+                if command.action == "plan.now":
+                    if (
+                        abs(
+                            (
+                                datetime.now(UTC) - datetime.fromisoformat(command.payload["slot"])
+                            ).total_seconds()
+                        )
+                        > 900
+                    ):
+                        raise Conflict("本轮预览已过期")
+                    context["window"] = {
+                        key: command.payload[key] for key in ("slot", "date_from", "date_to")
+                    }
+            atomic_json(path, {"command": command.model_dump(mode="json"), "context": context})
             os.chmod(path, 0o600)
     return {"id": command.id, "state": "QUEUED"}
+
+
+def read_queued(path: Path) -> tuple[Command, dict]:
+    value = json.loads(path.read_text())
+    if "command" in value:
+        return Command.model_validate(value["command"]), value.get("context", {})
+    return Command.model_validate(value), {}
 
 
 def operations(root: Path, *, limit: int | None = 100) -> list[dict]:
@@ -221,7 +289,7 @@ def operations(root: Path, *, limit: int | None = 100) -> list[dict]:
     for path in (root / "commands").glob("*.json"):
         if path.is_symlink():
             continue
-        command = Command.model_validate_json(path.read_text())
+        command, _context = read_queued(path)
         if command.id not in saved:
             pending.append(
                 {
@@ -336,7 +404,12 @@ def _state_write(db, source, state):
 
 
 def apply_command(
-    repo: Repository, command: Command, settings: RuntimeSettings, *, prepared_index=None
+    repo: Repository,
+    command: Command,
+    settings: RuntimeSettings,
+    *,
+    prepared_index=None,
+    queued_context: dict | None = None,
 ) -> dict:
     if command.action == "knowledge.apply":
         from ftr.knowledge.commands import dispatch
@@ -348,79 +421,108 @@ def apply_command(
         revision = row["revision"] if row else 0
         if revision != command.expected_revision:
             raise Conflict("计划版本已变化，请刷新后重试")
+        scope, snapshot = stored_scope(row)
         config = (
             SchedulerSettings.model_validate_json(row["settings_json"])
             if row
             else settings.scheduler.model_copy(deep=True)
         )
+        context = queued_context or {}
         if command.action == "plan.now":
-            # Window is previewed by the server; do not accept a wider arbitrary range.
             expected = window(datetime.fromisoformat(payload["slot"]), config)
             if {k: payload[k] for k in expected} != expected:
                 raise Conflict("本轮窗口与当前计划不匹配，请重新预览")
-            if (
+            if context:
+                if (
+                    context.get("window") != expected
+                    or context["scope"]["source_ids"] != payload["sources"]
+                ):
+                    raise Conflict("本轮冻结范围与命令不匹配")
+            elif (
                 abs((datetime.now(UTC) - datetime.fromisoformat(payload["slot"])).total_seconds())
                 > 900
             ):
                 raise Conflict("本轮预览已过期")
+            from ftr.sources import source_snapshot
+
+            frozen = context.get("source_snapshot") or source_snapshot(payload["sources"])
             for source in payload["sources"]:
                 state = read_states(db).get(source, initial_state())
-                pending = state["pending_window"]
-                state["pending_window"] = {
+                due = {
                     **expected,
-                    "date_from": min(expected["date_from"], pending["date_from"])
-                    if pending
-                    else expected["date_from"],
-                    "date_to": max(expected["date_to"], pending["date_to"])
-                    if pending
-                    else expected["date_to"],
+                    "source_snapshot": {source: frozen[source]},
+                    "plan_revision": revision,
+                    "scope_origin": "explicit",
                 }
+                state["pending_window"] = merge_pending(state["pending_window"], due)
                 state["explicit_run"] = True
                 _state_write(db, source, state)
             return {"window": expected, "sources": payload["sources"]}
         previous_config = config.model_copy(deep=True)
+        previous_scope = scope
+        previous_snapshot = snapshot
         old_enabled = config.enabled
         if command.action == "plan.save":
-            config = SchedulerSettings.model_validate(payload)
+            plan = parse_plan_payload(payload, scope, validate_registered=False)
+            config, scope = plan.settings, plan.scope
         else:
             config.enabled = command.action == "plan.enable"
-        if not config.enabled:
-            for source, state in read_states(db).items():
-                state["explicit_run"] = False
-                _state_write(db, source, state)
-        revision += 1
-        db.execute(
-            "INSERT OR REPLACE INTO managed_plan VALUES(1,?,?,?)",
-            (revision, revision, config.model_dump_json()),
-        )
-        # Preserve backlog collected before a plan edit, including long downtime.
+        if context:
+            if context["scope"] != scope.model_dump():
+                raise Conflict("冻结计划范围与当前修订不一致")
+            snapshot = context["source_snapshot"]
+        elif not snapshot or scope != previous_scope:
+            from ftr.sources import source_snapshot
+
+            snapshot = source_snapshot(scope.source_ids)
+        # Preserve previously authorized overdue windows using the old scope.
         if old_enabled:
             from ftr.scheduler import Scheduler
 
             scheduler = Scheduler(settings.model_copy(update={"scheduler": previous_config}))
-            # _plan normally commits; here defer it to the operation's transaction.
+            scheduler.scope = previous_scope
+            scheduler.source_snapshot = previous_snapshot
+            scheduler.plan_revision = revision
             scheduler._plan(repo, datetime.now(UTC), commit=False)
-        if config.enabled and not old_enabled:
-            due = window(datetime.now(UTC), config)
-            for source in SOURCES:
+        revision += 1
+        db.execute(
+            "INSERT OR REPLACE INTO managed_plan(id,revision,applied_revision,settings_json,scope_json) VALUES(1,?,?,?,?)",
+            (
+                revision,
+                revision,
+                config.model_dump_json(),
+                json.dumps({**scope.model_dump(), "source_snapshot": snapshot}, ensure_ascii=False),
+            ),
+        )
+        due_window = window(datetime.now(UTC), config)
+        for source, state in read_states(db).items():
+            if source not in scope.source_ids:
+                # Retain checkpoints/backlog, revoke automatic future execution.
+                state["scope_removed"] = True
+                state["explicit_run"] = False
+            else:
+                state["scope_removed"] = False
+            if not config.enabled:
+                state["explicit_run"] = False
+            _state_write(db, source, state)
+        if config.enabled:
+            for source in scope.source_ids:
                 state = read_states(db).get(source, initial_state())
-                pending = state["pending_window"]
-                state["pending_window"] = {
-                    **due,
-                    "date_from": min(due["date_from"], pending["date_from"])
-                    if pending
-                    else due["date_from"],
-                    "date_to": max(due["date_to"], pending["date_to"])
-                    if pending
-                    else due["date_to"],
-                }
+                state["scope_removed"] = False
+                if not old_enabled or source not in previous_scope.source_ids:
+                    due = {
+                        **due_window,
+                        "source_snapshot": {source: snapshot[source]},
+                        "plan_revision": revision,
+                        "scope_origin": "schedule",
+                    }
+                    state["pending_window"] = merge_pending(state["pending_window"], due)
                 _state_write(db, source, state)
-        # Disabled periods are not missed schedules. Retain pending/active windows.
         db.execute(
             "INSERT INTO scheduler_meta VALUES(1,?,?,NULL) ON CONFLICT(id) DO UPDATE SET config_json=excluded.config_json,last_check=excluded.last_check",
             (config.model_dump_json(), datetime.now(UTC).isoformat()),
         )
-        return {"revision": revision, "applied_revision": revision}
+        return {"revision": revision, "applied_revision": revision, "scope": scope.model_dump()}
     if command.action.startswith("source."):
         source = payload["source_id"]
         state = read_states(db).get(source, initial_state())
@@ -581,7 +683,7 @@ def process_commands(settings: RuntimeSettings, *, recover=None, on_operation=No
     for candidate in (settings.data_dir / "commands").glob("*.json"):
         if candidate.is_symlink():
             continue
-        queued = Command.model_validate_json(candidate.read_text())
+        queued, _context = read_queued(candidate)
         if queued.action == "knowledge.apply" and queued.payload.get("operation") in (
             "index.rebuild",
             "index.refresh",
@@ -607,7 +709,7 @@ def process_commands(settings: RuntimeSettings, *, recover=None, on_operation=No
         ):
             if path.is_symlink():
                 continue
-            command = Command.model_validate_json(path.read_text())
+            command, queued_context = read_queued(path)
             old = repo.db.execute(
                 "SELECT * FROM management_operations WHERE id=?", (command.id,)
             ).fetchone()
@@ -642,10 +744,16 @@ def process_commands(settings: RuntimeSettings, *, recover=None, on_operation=No
                         if isinstance(prepared_indexes[command.id], Exception):
                             raise prepared_indexes[command.id]
                         result = apply_command(
-                            repo, executable, settings, prepared_index=prepared_indexes[command.id]
+                            repo,
+                            executable,
+                            settings,
+                            prepared_index=prepared_indexes[command.id],
+                            queued_context=queued_context,
                         )
                     else:
-                        result = apply_command(repo, executable, settings)
+                        result = apply_command(
+                            repo, executable, settings, queued_context=queued_context
+                        )
                     state = "APPLIED"
                     if command.action == "review.recover":
                         # Material writes use existing content idempotence; completion can replay.
