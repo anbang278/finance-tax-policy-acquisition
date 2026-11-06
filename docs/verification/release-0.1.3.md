@@ -24,3 +24,7 @@
 - 干净检出 `54b1b7c` 再跑完整Chromium：530 passed、1 skipped、1 warning，100.48秒；无本机原件目录依赖。
 - 干净构建及源码目录外wheel：PASS。sdist 166文件、wheel 67文件，构建版本0.1.3、dirty=false；包含19份自编夹具，竞品研究、完整官网原件、资料库、运行日志及截图均未进入制品。独立成员和版本审查PASS。两份既有历史验收文档仍有旧本机路径，其内容与0.1.2一致，本次不改写。
 - 本记录随本地验证提交冻结，不预写远端结果。三平台CI、最终main/标签提交、更新检测与资产SHA-256以[本版本发布页](https://github.com/anbang278/finance-tax-policy-acquisition/releases/tag/v0.1.3)及其 `release-verification.json`、`SHA256SUMS` 为最终发布证据。
+
+## 远程CI发现与修复（2026-11-07）
+
+首轮PR检查[42246625709](https://github.com/anbang278/finance-tax-policy-acquisition/actions/runs/42246625709)在Ubuntu的390px Wiki流程失败：旧详情响应覆盖新选择，导致上传框消失。同提交的push三平台检查全部通过，说明存在时序敏感性。新增六种受控延迟用例先复现失败，覆盖条目/任务双向切换、旧详情/旧概览响应，以及新选择仍加载时再次刷新；修复为独立选择目标和选择版本校验，并使旧刷新不再打开过期详情。修复后知识专项54 passed，独立复跑六种竞态及桌面/390px原流程8 passed；整仓完整Chromium为536 passed、1 skipped、1 warning（86.36秒），静态检查通过。最终远端结果随发布制品记录，首轮失败保留。
