@@ -21,4 +21,6 @@
 - 公开夹具：104项适配器专项通过；17份自编HTML及manifest/说明替代公开CI的官网原件依赖，43份本地原件哈希未变。
 - 冻结依赖同步、ruff、规定参数的mypy（46源码）、本次44个Python文件格式、三份页面脚本语法及差异检查：PASS。直接运行未带仓库规定 `--ignore-missing-imports` 的mypy曾报告4项既有lxml存根缺失，按仓库命令复跑通过。
 - macOS完整Chromium回归：530 passed、1 skipped（Windows专属）、1 warning（既有Starlette/httpx弃用提醒），84.50秒；包含桌面/390px、旧库迁移、备份恢复及管理流程。
-- 干净检出复测、构建、源码外wheel和三平台CI待执行；main回读和更新检测待远端发布，未完成不计通过。
+- 干净检出 `54b1b7c` 再跑完整Chromium：530 passed、1 skipped、1 warning，100.48秒；无本机原件目录依赖。
+- 干净构建及源码目录外wheel：PASS。sdist 166文件、wheel 67文件，构建版本0.1.3、dirty=false；包含19份自编夹具，竞品研究、完整官网原件、资料库、运行日志及截图均未进入制品。独立成员和版本审查PASS。两份既有历史验收文档仍有旧本机路径，其内容与0.1.2一致，本次不改写。
+- 本记录随本地验证提交冻结，不预写远端结果。三平台CI、最终main/标签提交、更新检测与资产SHA-256以[本版本发布页](https://github.com/anbang278/finance-tax-policy-acquisition/releases/tag/v0.1.3)及其 `release-verification.json`、`SHA256SUMS` 为最终发布证据。
