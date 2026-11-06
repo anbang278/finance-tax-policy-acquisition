@@ -122,3 +122,31 @@ A05 按本轮确认改为“错误内容或错误分类不得通过”；合法�
 | M5 / A18、A21–22、A26 | knowledge.web、受保护上传、backup、静态资源 | 只读/越界/备份、浏览器完整流程、verify_wheel |
 
 工程行为、模拟 API、真实模型语义及真实源站验收分开报告，状态以知识与 Wiki 验收记录为准。
+
+## 企业所得税专题追踪（2026-11-06）
+
+| 需求 | 实现入口 | 证据入口 |
+|---|---|---|
+| 官方清单与冻结范围 | models、repository、runtime、cli、diagnostics | test_topic_research；live-collection.json |
+| 政策身份与兼容迁移 | policy、repository | 文号归组、旧任务与v5回传重放测试 |
+| 时间、关系与逐项支持性 | knowledge/models、indexing、service、research | 独立预审包、36题与风险三轮评测 |
+| 候选预览及报告 | knowledge/wiki、web、cli与wiki页面 | 桌面/390px完整浏览器流程、4Wiki及3报告 |
+| 变化闭环与恢复 | service依赖与commands影响处理 | 关系待核、修订发布及来源依赖测试 |
+
+实际结果统一见[专题升级记录](../verification/cit-research-loop/REPORT.md)。
+
+
+## 来源目录扩展追踪（2026-11-06）
+
+| 需求 | 实现入口 | 验证入口与限制 |
+|---|---|---|
+| SX-01 六类内容与 36 局逐栏目矩阵 | `config/sources.yaml`、`config/pending-sources.yaml`、`sources.catalog_entries` | 逐来源证据与缺口清单；矩阵项不能计作通过 |
+| SX-02 目录筛选、多选、冻结请求下载 | CLI sources/collect preview、Web sources/preview、`app.js` | `test_source_expansion`、`test_source_integration`的 API 与 1440/390px Chromium |
+| SX-03 栏目快照与当前信任交集 | `models.TaskRequest`、`sources`、`repository.create_task` | 外部伪造/过期快照、旧请求幂等、冻结 profile 续跑、撤销主机前零请求 |
+| SX-04 公共适配器及字段语义 | `adapters/public.py`、`config.SourceConfig`、`models.DocumentRecord` | `test_public_adapters`与受控来源 Collector 集成；真实站点准入另验 |
+| SX-05 单源隔离、共享主机与预算 | `runtime`、`network`、`CollectionSettings` | 坏规则隔离、跨源页数/资料数、日期排除与补附件/导航原件字节、同主机间隔 |
+| SX-06 显式调度范围与兼容 | `schedule_plan`、`management`、`scheduler`、`manage.js` | `test_source_schedule`及既有 scheduler/management；旧计划不扩源、持久公平轮转 |
+| SX-07 v7 与安装分发 | `repository`、setup 脚本、wheel 资源映射 | v6/早期库迁移、旧 scope、备份、按需浏览器和脱离源码 wheel；实机另验 |
+| SX-08 质量与发布门禁保持 | 语义复核、政策身份、knowledge/Wiki 既有服务 | 新来源采集成功不自动启用知识或发布；专业有效性/企业适用性独立核验 |
+
+本表用于定位实现与证据，不把“已实现”当作“逐站已验证”。操作和范围口径见[来源目录指南](../guides/source-catalog.md)，当前真实状态见[逐来源验证目录](../verification/source-expansion/)。

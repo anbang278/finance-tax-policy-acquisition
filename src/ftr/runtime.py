@@ -10,9 +10,10 @@ import sys
 import threading
 import time
 from collections.abc import Iterator
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlsplit
 
 import portalocker
@@ -40,19 +41,16 @@ from ftr.network import (
     AccessBlocked,
     BoundedClient,
     BrowserSessionClient,
+    BudgetReached,
     TransientFailure,
     browser_proxy,
     check_url,
     resolve_proxy,
+    shared_host_requests,
 )
 from ftr.repository import Repository
 from ftr.rules import Rules, StructureDrift, active_rules
-
-
-class BudgetReached(RuntimeError):
-    def __init__(self, message, code="BUDGET_REACHED"):
-        super().__init__(message)
-        self.code = code
+from ftr.sources import resolve_source
 
 
 class PdfWarnings(logging.Handler):
@@ -81,6 +79,17 @@ def data_lock(data_dir: Path) -> Iterator[None]:
             portalocker.unlock(handle)
 
 
+def drain_private_context(context):
+    """Stop collector-owned pages before detaching interrupted routes."""
+    # Waiting on synchronous route callbacks can deadlock during interruption.
+    # Stop request producers while their guards are still installed.
+    for page in context.pages:
+        with suppress(PlaywrightError):
+            page.close(run_before_unload=False)
+    with suppress(PlaywrightError):
+        context.unroute_all(behavior="ignoreErrors")
+
+
 class Collector:
     def __init__(
         self,
@@ -100,10 +109,10 @@ class Collector:
         self.repo = Repository(data_dir)
         self.evidence = EvidenceStore(data_dir)
         self.sources = load_sources().sources
-        self.rules = {
-            key: (rule_overrides or {}).get(key) or active_rules(data_dir, key)
-            for key in self.sources
-        }
+        self.rules: dict[str, Rules] = {}
+        self.rule_overrides = rule_overrides or {}
+        self.adapters: dict = {}
+        self._host_requests = shared_host_requests(str(data_dir.resolve()))
         self.failure_ids: list[str] = []
         self.processed_documents = 0
         self.incomplete_documents = 0
@@ -115,11 +124,29 @@ class Collector:
         self._progress_snapshot: dict = {}
         self._stop_reasons: list[str] = []
 
+    def make_adapter(self, source_id, config, client, page=None):
+        """One factory for discovery, targeted collection, and recovery."""
+        if config.adapter == "mof":
+            return MofAdapter(config, client)
+        if config.adapter == "chinatax":
+            return ChinataxAdapter(
+                config, page, client, timeout_seconds=self.settings.browser.timeout_seconds
+            )
+        from ftr.adapters.public import PublicAdapter
+
+        return PublicAdapter(
+            source_id,
+            config,
+            client,
+            page=page,
+            timeout_seconds=self.settings.browser.timeout_seconds,
+        )
+
     def close(self) -> None:
         self.repo.close()
 
-    def collect(self, request: TaskRequest) -> OperationResponse:
-        task_id = self.repo.create_task(request)
+    def collect(self, request: TaskRequest, *, trusted_snapshot: bool = False) -> OperationResponse:
+        task_id = self.repo.create_task(request, trusted_snapshot=trusted_snapshot)
         return self.resume(task_id)
 
     def resume(self, task_id: str, *, bounded_source: str | None = None) -> OperationResponse:
@@ -132,7 +159,26 @@ class Collector:
         self.detail_attempts = 0
         self._transient_streak = {}
         self._progress_started = time.monotonic()
-        self._progress_snapshot = {"task_id": task_id, "stage": "starting"}
+        counts = dict(
+            self.repo.db.execute(
+                "SELECT state,COUNT(*) FROM discovered WHERE task_id=? GROUP BY state", (task_id,)
+            )
+        )
+        runs = self.repo.db.execute(
+            "SELECT source_id,next_page,pages_count FROM source_runs WHERE task_id=?", (task_id,)
+        ).fetchall()
+        self._progress_snapshot = {
+            "task_id": task_id,
+            "stage": "starting",
+            "discovered": sum(counts.values()),
+            "saved": counts.get("SAVED", 0),
+            "failed": counts.get("FAILED", 0),
+            "pages": sum(run["pages_count"] for run in runs),
+            "last_checkpoint": {
+                "source_next_pages": {run["source_id"]: run["next_page"] for run in runs},
+                "at": datetime.now(UTC).isoformat(),
+            },
+        }
         previous = {}
         if threading.current_thread() is threading.main_thread():
             for signum in (signal.SIGINT, signal.SIGTERM):
@@ -220,9 +266,15 @@ class Collector:
             "stage": getattr(self, "_request_stage", "checkpoint"),
         }
 
-    def _network_request(self, task_id, source_id, started, url):
+    def _network_request(self, task_id, source_id, started, url, client=None):
         self._checkpoint(task_id, source_id, started)
         self._last_request_url = url
+        if client is not None:
+            remaining = self._remaining_bytes(task_id, source_id)
+            if remaining <= 0:
+                raise BudgetReached("达到来源或整批下载预算")
+            client.max_bytes = self.settings.network.max_file_bytes
+            client.remaining_bytes = remaining
         if self.detail_limit is not None:
             if self._request_stage == "discover":
                 if self._list_attempts >= 1:
@@ -269,33 +321,51 @@ class Collector:
             browser = None
             try:
                 for source_id in request.source_ids:
-                    config = self.sources[source_id]
+                    try:
+                        config = resolve_source(source_id, request.source_snapshot)
+                        if config.adapter in ("mof", "chinatax"):
+                            self.rules[source_id] = self.rule_overrides.get(
+                                source_id
+                            ) or active_rules(self.data_dir, source_id)
+                    except (ValueError, RuntimeError, OSError) as exc:
+                        self._last_request_url = (
+                            self.sources[source_id].entry if source_id in self.sources else ""
+                        )
+                        self._failure(task_id, source_id, exc, "discover")
+                        warnings.append(f"{source_id}: {safe_message(exc)}")
+                        self._stop_reasons.append("SOURCE_FAILURE")
+                        continue
                     client: BoundedClient | BrowserSessionClient
                     client = (
                         BrowserSessionClient(
                             config.allowed_hosts, settings=self.settings.network, proxy=self.proxy
                         )
-                        if source_id == "chinatax"
+                        if config.adapter in ("chinatax", "public_browser")
                         else BoundedClient(
                             config.allowed_hosts, settings=self.settings.network, proxy=self.proxy
                         )
                     )
+                    client.host_requests = self._host_requests
                     self._list_attempts = 0
                     self._request_stage = "discover"
                     self._last_request_url = config.entry
                     client.checkpoint = lambda source_id=source_id: self._checkpoint(
                         task_id, source_id, started
                     )
-                    client.before_request = lambda url, source_id=source_id: self._network_request(
-                        task_id, source_id, started, url
+                    client.before_request = lambda url, source_id=source_id, client=client: (
+                        self._network_request(task_id, source_id, started, url, client)
                     )
-                    adapter: MofAdapter | ChinataxAdapter | None = None
+                    adapter: Any = None
+                    page = None
+                    context = None
                     try:
                         self._checkpoint(task_id, source_id, started)
-                        if source_id == "mof":
+                        if config.adapter == "mof":
                             assert isinstance(client, BoundedClient)
-                            adapter = MofAdapter(config, client)
+                            adapter = self.make_adapter(source_id, config, client)
                             page = None
+                        elif config.adapter == "public_html":
+                            adapter = self.make_adapter(source_id, config, client)
                         else:
                             if browser is None:
                                 try:
@@ -319,35 +389,39 @@ class Collector:
                                     raise RuntimeError(
                                         "无法启动浏览器访问税务站，请检查安装与显示环境"
                                     ) from exc
-                            page = browser.new_page()
                             assert isinstance(client, BrowserSessionClient)
-                            adapter = ChinataxAdapter(
-                                config,
-                                page,
-                                client,
-                                timeout_seconds=self.settings.browser.timeout_seconds,
-                            )
-                        adapter.rules = self.rules[source_id]
+                            if config.adapter == "public_browser":
+                                context = browser.new_context(service_workers="block")
+                                page = context.new_page()
+                                client.public_browser_service_workers_blocked = True
+                                adapter = self.make_adapter(source_id, config, client, page)
+                            else:
+                                page = browser.new_page()
+                                adapter = self.make_adapter(source_id, config, client, page)
+                        self.adapters[source_id] = adapter
+                        if source_id in self.rules:
+                            adapter.rules = self.rules[source_id]
                         self.repo.audit(
                             task_id,
                             "rule_version",
-                            {"source_id": source_id, "version": adapter.rules.version},
+                            {
+                                "source_id": source_id,
+                                "version": self.rules[source_id].version
+                                if source_id in self.rules
+                                else config.registry_version,
+                            },
                         )
-                        try:
-                            self._run_source(
-                                task_id,
-                                request,
-                                source_id,
-                                config,
-                                client,
-                                adapter,
-                                page,
-                                started,
-                                warnings,
-                            )
-                        finally:
-                            if page is not None:
-                                page.close()
+                        self._run_source(
+                            task_id,
+                            request,
+                            source_id,
+                            config,
+                            client,
+                            adapter,
+                            page,
+                            started,
+                            warnings,
+                        )
                     except (AccessBlocked, BudgetReached, ValueError, RuntimeError) as exc:
                         if isinstance(exc, BudgetReached):
                             self._stop_reasons.append(exc.code)
@@ -362,6 +436,8 @@ class Collector:
                         evidence_id = None
                         if snapshot and isinstance(exc, StructureDrift):
                             raw, url, media, _page_number = snapshot
+                            if not getattr(self, "_current_response_accounted", False):
+                                self._received(task_id, source_id, len(raw))
                             evidence = self.evidence.save(raw, url, url, media)
                             self.repo.save_evidence(evidence)
                             evidence_id = evidence.evidence_id
@@ -372,6 +448,14 @@ class Collector:
                             f"{source_id}: {safe_message(exc)}（failure_id={failure_id}）"
                         )
                     finally:
+                        if context is not None:
+                            drain_private_context(context)
+                        if page is not None:
+                            page.close()
+                        if hasattr(adapter, "close"):
+                            adapter.close()
+                        if context is not None:
+                            context.close()
                         client.close()
             finally:
                 if browser is not None:
@@ -490,7 +574,9 @@ class Collector:
             "stage": stage,
             "page": run["next_page"],
             "evidence_id": evidence_id,
-            "rule_version": self.rules[source_id].version,
+            "rule_version": self.rules[source_id].version
+            if source_id in self.rules
+            else "unloaded",
             "response": {"sha256": evidence_id},
             "expected": "列表含标题/官方链接，日期有出处或明确为空，分页前进；正文与标题可靠定位",
             "error_type": type(exc).__name__,
@@ -500,8 +586,39 @@ class Collector:
         self.failure_ids.append(failure_id)
         return failure_id
 
+    def _remaining_bytes(self, task_id, source_id):
+        run = self.repo.source_run(task_id, source_id)
+        base = getattr(self, "_budget_baseline", {}).get(source_id)
+        used = run["bytes_count"] - (base["bytes_count"] if base else 0)
+        return min(
+            self.settings.collection.max_bytes_per_source - used,
+            self.settings.collection.max_bytes_per_batch - self._batch_totals()["bytes_count"],
+        )
+
+    def _received(self, task_id, source_id, size):
+        self.repo.db.execute(
+            "UPDATE source_runs SET bytes_count=bytes_count+? WHERE task_id=? AND source_id=?",
+            (size, task_id, source_id),
+        )
+        self.repo.db.commit()
+
+    def _batch_totals(self):
+        totals = {"pages_count": 0, "documents_count": 0, "bytes_count": 0}
+        for source_id, base in getattr(self, "_budget_baseline", {}).items():
+            current = self.repo.source_run(base["task_id"], source_id)
+            for key in totals:
+                totals[key] += current[key] - base[key]
+        return totals
+
     def _budget(self, started: float, request: TaskRequest, row, check_pages: bool = True) -> None:
         base = self._budget_baseline[str(row["source_id"])]
+        totals = self._batch_totals()
+        if (
+            (check_pages and totals["pages_count"] >= self.settings.collection.max_pages_per_batch)
+            or totals["documents_count"] >= self.settings.collection.max_documents_per_batch
+            or totals["bytes_count"] >= self.settings.collection.max_bytes_per_batch
+        ):
+            raise BudgetReached("达到整批采集预算，请续跑")
         if (
             time.monotonic() - started >= self.settings.collection.max_duration_seconds
             or (check_pages and row["pages_count"] - base["pages_count"] >= request.max_pages)
@@ -545,7 +662,17 @@ class Collector:
             self._request_stage = "discover"
             self._checkpoint(task_id, source_id, started)
             page_number = int(run["next_page"])
+            self._current_response_accounted = False
             refs, next_page, raw, media_type = adapter.discover(page_number)
+            remaining_bytes = min(
+                self.settings.collection.max_bytes_per_source
+                - (run["bytes_count"] - self._budget_baseline[source_id]["bytes_count"]),
+                self.settings.collection.max_bytes_per_batch - self._batch_totals()["bytes_count"],
+            )
+            self._received(task_id, source_id, len(raw))
+            self._current_response_accounted = True
+            if len(raw) > remaining_bytes:
+                raise BudgetReached("列表超过剩余字节预算")
             page_hash = digest(raw)
             if next_page is not None and next_page != page_number + 1:
                 raise StructureDrift("分页必须向下一页前进")
@@ -559,6 +686,7 @@ class Collector:
             listing_url = getattr(adapter, "last_request_url", None) or listing_url
             listing_evidence = self.evidence.save(raw, listing_url, final_listing_url, media_type)
             self.repo.save_evidence(listing_evidence)
+            self._save_captures(task_id, source_id, adapter, listing_evidence.evidence_id)
             for ref in refs:
                 ref.discovered_from = listing_evidence.evidence_id
             self.repo.db.execute(
@@ -573,10 +701,36 @@ class Collector:
                 ),
             )
             self.repo.save_page(task_id, source_id, refs, next_page)
+            self.repo.db.commit()
             self.repo.resolve_failures(task_id, source_id, "discover", listing_url)
             self.repo.resolve_failures(task_id, source_id, "discover", config.entry)
             run = self.repo.source_run(task_id, source_id)
         self._process_refs(task_id, request, source_id, config, client, page, started, warnings)
+
+    def _save_captures(self, task_id, source_id, adapter, rendered_id):
+        original_ids = []
+        for raw, url, media, status in getattr(adapter, "last_original_responses", []):
+            if digest(raw) != rendered_id and len(raw) > self._remaining_bytes(task_id, source_id):
+                raise BudgetReached("浏览器原始响应超过剩余证据保存预算")
+            evidence = self.evidence.save(raw, url, url, media)
+            self.repo.save_evidence(evidence)
+            if evidence.evidence_id != rendered_id:
+                self._received(task_id, source_id, len(raw))
+            original_ids.append({"evidence_id": evidence.evidence_id, "status": status})
+        capture = getattr(adapter, "last_capture", None)
+        if capture and capture.get("capture_kind") == "browser_dom" and not original_ids:
+            raise StructureDrift("浏览器DOM缺少已保存的原始响应，不能进入资料复核")
+        if capture:
+            self.repo.audit(
+                task_id,
+                "source_capture",
+                {
+                    "source_id": source_id,
+                    "rendered_evidence_id": rendered_id,
+                    "original_responses": original_ids,
+                    "capture": capture,
+                },
+            )
 
     def _process_refs(
         self,
@@ -615,25 +769,68 @@ class Collector:
                 if self.detail_limit is not None and self.detail_attempts >= self.detail_limit:
                     raise BudgetReached("达到有界验证的详情请求上限")
                 check_url(ref.url, config.allowed_hosts, self.proxy)
-                raw, final_url, media_type = client.get(ref.url)
+                adapter: Any = self.adapters.get(source_id)
+                raw, final_url, media_type = (
+                    adapter.fetch_detail(ref.url)
+                    if hasattr(adapter, "fetch_detail")
+                    else client.get(ref.url)
+                )
                 check_url(final_url, config.allowed_hosts, self.proxy)
-                if len(raw) > self.settings.collection.max_bytes_per_source - (
-                    run["bytes_count"] - self._budget_baseline[source_id]["bytes_count"]
-                ):
+                remaining = min(
+                    self.settings.collection.max_bytes_per_source
+                    - (run["bytes_count"] - self._budget_baseline[source_id]["bytes_count"]),
+                    self.settings.collection.max_bytes_per_batch
+                    - self._batch_totals()["bytes_count"],
+                )
+                self._received(task_id, source_id, len(raw))
+                if len(raw) > remaining:
                     raise BudgetReached("正文超过剩余下载预算，请续跑或调整运行预算")
                 evidence = self.evidence.save(raw, ref.url, final_url, media_type)
                 self.repo.save_evidence(evidence)
-                record = parse_detail(ref, raw, evidence.evidence_id, self.rules[source_id])
-                if self.rules[source_id].version != Rules(source_id=source_id).version:
+                self._save_captures(task_id, source_id, adapter, evidence.evidence_id)
+                parse_ref = ref
+                if request.mode == "targeted":
+                    parse_ref = ref.model_copy(
+                        update={"listing_title": "", "document_number_hint": None}
+                    )
+                record = (
+                    adapter.parse_detail(parse_ref, raw, evidence.evidence_id)
+                    if hasattr(adapter, "parse_detail")
+                    else parse_detail(parse_ref, raw, evidence.evidence_id, self.rules[source_id])
+                )
+                record.source_publisher = config.publisher or config.name
+                record.categories = config.categories
+                if request.mode == "targeted":
+                    from ftr.policy import policy_identity
+
+                    target = next(
+                        t
+                        for t in request.official_urls
+                        if t.source_id == source_id and t.url == ref.url
+                    )
+                    if target.document_number:
+                        expected = policy_identity(target.document_number, "", "expected")
+                        observed = policy_identity(
+                            record.document_number, record.title, record.record_id
+                        )
+                        if (
+                            expected["identity_status"] != "candidate"
+                            or expected["policy_key"] != observed["policy_key"]
+                        ):
+                            record.limitations.append("定向文号与原文未匹配，需核对所选政策身份")
+                if (
+                    source_id in self.rules
+                    and self.rules[source_id].version != Rules(source_id=source_id).version
+                ):
                     record.parser_version += ":" + self.rules[source_id].version
-                if not record.body_text or not record.title:
+                if not record.title or (not record.body_text and not record.attachments):
                     raise StructureDrift("正文或标题区域未可靠定位")
-                remaining_bytes = self.settings.collection.max_bytes_per_source - (
-                    run["bytes_count"] - self._budget_baseline[source_id]["bytes_count"] + len(raw)
+                remaining_bytes = min(
+                    remaining - len(raw),
+                    self.settings.collection.max_bytes_per_batch
+                    - self._batch_totals()["bytes_count"],
                 )
-                attachment_bytes = self._attachments(
-                    record, config, client, warnings, remaining_bytes, started
-                )
+                self._attachments(record, config, client, warnings, remaining_bytes, started)
                 self._transient_streak[source_id] = 0
                 if (
                     request.date_basis == "issued_date"
@@ -662,10 +859,6 @@ class Collector:
                 self._save_record(task_id, record)
                 self.repo.resolve_failures(task_id, source_id, "detail", ref.url)
                 self.repo.set_ref_state(task_id, source_id, ref.url, "SAVED")
-                self.repo.db.execute(
-                    "UPDATE source_runs SET bytes_count=bytes_count+? WHERE task_id=? AND source_id=?",
-                    (len(raw) + attachment_bytes, task_id, source_id),
-                )
                 self.repo.db.commit()
                 if self._attachment_stop is not None:
                     raise self._attachment_stop
@@ -733,8 +926,15 @@ class Collector:
         task = self.repo.task(task_id)
         if task["cancel_requested"] or task["pause_requested"] or task["state"] == "CANCELLED":
             raise ValueError("原任务人工暂停或取消，不自动补取")
-        source_id, config = original.source_id, self.sources[original.source_id]
+        source_id = original.source_id
+        saved_request = TaskRequest.from_saved(task["request_json"])
+        config = resolve_source(source_id, saved_request.source_snapshot)
+        if config.adapter in ("mof", "chinatax"):
+            self.rules[source_id] = self.rule_overrides.get(source_id) or active_rules(
+                self.data_dir, source_id
+            )
         self._active_task = task_id
+        self._budget_baseline = {source_id: self.repo.source_run(task_id, source_id)}
         self._request_stage = "attachment"
         started = time.monotonic()
         record = original.model_copy(
@@ -747,17 +947,23 @@ class Collector:
                 BrowserSessionClient(
                     config.allowed_hosts, settings=self.settings.network, proxy=self.proxy
                 )
-                if source_id == "chinatax"
+                if config.adapter in ("chinatax", "public_browser")
                 else BoundedClient(
                     config.allowed_hosts, settings=self.settings.network, proxy=self.proxy
                 )
             )
             stack.callback(client.close)
+            client.host_requests = self._host_requests
+            adapter: Any = None
+            context = None
+            if config.adapter == "public_html":
+                adapter = self.make_adapter(source_id, config, client)
+                stack.callback(adapter.close)
             client.checkpoint = lambda: self._checkpoint(task_id, source_id, started)
             client.before_request = lambda url: self._network_request(
-                task_id, source_id, started, url
+                task_id, source_id, started, url, client
             )
-            if source_id == "chinatax":
+            if config.adapter in ("chinatax", "public_browser"):
                 playwright = stack.enter_context(sync_playwright())
                 browser, _ = launch_browser(
                     playwright,
@@ -766,13 +972,21 @@ class Collector:
                     args=["--no-proxy-server"] if self.proxy is None else [],
                 )
                 stack.callback(browser.close)
-                page = browser.new_page()
-                stack.callback(page.close)
                 assert isinstance(client, BrowserSessionClient)
-                adapter = ChinataxAdapter(
-                    config, page, client, timeout_seconds=self.settings.browser.timeout_seconds
-                )
-                adapter.ensure_session()
+                if config.adapter == "public_browser":
+                    context = browser.new_context(service_workers="block")
+                    stack.callback(context.close)
+                    page = context.new_page()
+                    client.public_browser_service_workers_blocked = True
+                    adapter = self.make_adapter(source_id, config, client, page)
+                    stack.callback(adapter.close)
+                else:
+                    page = browser.new_page()
+                    adapter = self.make_adapter(source_id, config, client, page)
+                    adapter.ensure_session()
+                stack.callback(page.close)
+                if context is not None:
+                    stack.callback(drain_private_context, context)
             if not original.body_text.strip():
                 ref_row = self.repo.db.execute(
                     "SELECT ref_json FROM discovered WHERE task_id=? AND source_id=? AND url=?",
@@ -782,14 +996,24 @@ class Collector:
                     raise ValueError("原任务没有已登记的详情引用，禁止扩大补取范围")
                 ref = DiscoveredRef.model_validate_json(ref_row[0])
                 check_url(ref.url, config.allowed_hosts, self.proxy)
-                raw, final_url, media_type = client.get(ref.url)
+                raw, final_url, media_type = (
+                    adapter.fetch_detail(ref.url)
+                    if hasattr(adapter, "fetch_detail")
+                    else client.get(ref.url)
+                )
                 check_url(final_url, config.allowed_hosts, self.proxy)
                 used_bytes = len(raw)
+                self._received(task_id, source_id, len(raw))
                 if used_bytes > self.settings.collection.max_bytes_per_source:
                     raise BudgetReached("正文超过本批补取字节预算")
                 evidence = self.evidence.save(raw, ref.url, final_url, media_type)
                 self.repo.save_evidence(evidence)
-                parsed = parse_detail(ref, raw, evidence.evidence_id, self.rules[source_id])
+                self._save_captures(task_id, source_id, adapter, evidence.evidence_id)
+                parsed = (
+                    adapter.parse_detail(ref, raw, evidence.evidence_id)
+                    if hasattr(adapter, "parse_detail")
+                    else parse_detail(ref, raw, evidence.evidence_id, self.rules[source_id])
+                )
                 if not parsed.body_text.strip():
                     raise ValueError("正文仍无法可靠定位；需人工处理结构或内容限制")
                 # Preserve original attachment registry: this operation cannot add new URLs.
@@ -835,10 +1059,6 @@ class Collector:
                 record,
                 base_record_id=record_id if record.evidence_id == original.evidence_id else None,
             )
-            self.repo.db.execute(
-                "UPDATE source_runs SET bytes_count=bytes_count+? WHERE task_id=? AND source_id=?",
-                (used_bytes, task_id, source_id),
-            )
             return {
                 "record_id": new_record_id,
                 "created": created,
@@ -863,17 +1083,11 @@ class Collector:
                 "within_range" if getattr(record, key) is not None else "unknown"
             )
             before = self.repo._material_digest(record)
-            remaining = self.settings.collection.max_bytes_per_source - (
-                run["bytes_count"] - self._budget_baseline[source_id]["bytes_count"]
-            )
+            remaining = self._remaining_bytes(task_id, source_id)
             self._request_stage = "attachment"
-            downloaded = self._attachments(record, config, client, warnings, remaining, started)
+            self._attachments(record, config, client, warnings, remaining, started)
             if self.repo._material_digest(record) != before:
                 self._save_record(task_id, record, base_record_id=original.record_id)
-            self.repo.db.execute(
-                "UPDATE source_runs SET bytes_count=bytes_count+? WHERE task_id=? AND source_id=?",
-                (downloaded, task_id, source_id),
-            )
             self.repo.db.commit()
             if self._attachment_stop is not None:
                 raise self._attachment_stop
@@ -915,6 +1129,7 @@ class Collector:
                 self._request_stage = "attachment"
                 check_url(attachment.url, config.allowed_hosts, self.proxy)
                 raw, final_url, media_type = client.get(attachment.url)
+                self._received(self._active_task, record.source_id, len(raw))
                 check_url(final_url, config.allowed_hosts, self.proxy)
                 if len(raw) > remaining_bytes:
                     attachment.download_state = "blocked"
@@ -930,7 +1145,11 @@ class Collector:
                 downloaded_bytes += len(raw)
                 attachment.evidence_id = evidence.evidence_id
                 attachment.download_state = "saved"
-                if urlsplit(attachment.url).path.lower().endswith(".pdf"):
+                if (
+                    urlsplit(attachment.url).path.lower().endswith(".pdf")
+                    or "application/pdf" in media_type.lower()
+                    or raw.lstrip().startswith(b"%PDF-")
+                ):
                     handler = PdfWarnings()
                     logger = logging.getLogger("pypdf")
                     old_handlers, old_propagate = logger.handlers[:], logger.propagate

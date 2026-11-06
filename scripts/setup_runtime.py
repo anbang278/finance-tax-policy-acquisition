@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 from ftr.browser import launch_browser
-from ftr.config import load_settings
+from ftr.config import load_settings, load_sources
 from ftr.environment import environment_report
 
 
@@ -50,8 +50,14 @@ def project_version(project: Path) -> dict:
 
 
 def prepare(capability: str, project: Path) -> dict:
-    if capability not in ("mof", "chinatax", "workbench", "all"):
-        raise ValueError("未知能力")
+    registry = load_sources().sources
+    source_ids = (
+        []
+        if capability == "workbench"
+        else (["mof", "chinatax"] if capability == "all" else capability.split(","))
+    )
+    if any(value not in registry for value in source_ids):
+        raise ValueError("未知来源ID；使用 ftr sources 查看目录")
     config = (
         Path(os.environ["FTR_CONFIG"]).expanduser().resolve()
         if os.environ.get("FTR_CONFIG")
@@ -67,7 +73,9 @@ def prepare(capability: str, project: Path) -> dict:
             pass
     settings = load_settings(config)
     browser = {
-        "required": capability in ("chinatax", "all"),
+        "required": any(
+            registry[value].adapter in ("chinatax", "public_browser") for value in source_ids
+        ),
         "launch_tested": False,
         "launched": False,
     }
@@ -131,6 +139,7 @@ def prepare(capability: str, project: Path) -> dict:
         "checks": report,
         "browser": browser,
         "source_access_tested": False,
+        "source_ids": source_ids,
         "error": error,
     }
 

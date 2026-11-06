@@ -17,14 +17,16 @@ from pydantic import ValidationError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from ftr.config import SchedulerSettings, WebSettings
+from ftr.sources import RegisteredSourceId
 from ftr.web.query import QueryError, ReadQueries, response
 
-Source = Literal["mof", "chinatax"]
+Source = RegisteredSourceId
 Quality = Literal["collected", "validated", "quarantined", "rejected"]
 DocumentType = Literal[
     "policy_file",
     "policy_announcement",
     "official_interpretation",
+    "official_qa",
     "release_message",
     "other",
     "unknown",
@@ -171,8 +173,35 @@ def create_app(
         return response(**status(data_dir, scheduler_settings))
 
     @app.get("/api/sources")
-    def sources() -> dict:
-        return queries.sources()
+    def sources(
+        region: str | None = None, authority: str | None = None, category: str | None = None
+    ) -> dict:
+        result = queries.sources()
+        result["items"] = [
+            s
+            for s in result["items"]
+            if (not region or s["region"] == region)
+            and (not authority or s["authority_id"] == authority)
+            and (not category or category in s["categories"])
+        ]
+        return result
+
+    @app.post("/api/sources/preview")
+    async def source_preview(request: Request) -> dict:
+        from ftr.models import TaskRequest
+        from ftr.sources import freeze_scope
+
+        try:
+            value = TaskRequest.model_validate(await request.json())
+            value = value.model_copy(
+                update={"source_snapshot": freeze_scope(value.source_ids, value.source_snapshot)}
+            )
+        except (ValueError, TypeError) as exc:
+            raise QueryError("SCOPE_INVALID", "来源范围、日期或冻结快照无效", 422) from exc
+        return response(
+            request=value.model_dump(mode="json"),
+            budget=runtime_settings.collection.model_dump(mode="json"),
+        )
 
     @app.get("/api/policies")
     def policies(

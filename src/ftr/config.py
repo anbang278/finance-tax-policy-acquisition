@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+from functools import lru_cache
 from importlib.resources import files
 from pathlib import Path
 from typing import Any, Literal
@@ -87,6 +88,9 @@ class CollectionSettings(SettingsModel):
     max_documents: int = Field(default=1000, ge=1, le=1000, strict=True)
     max_duration_seconds: float = Field(default=1800, gt=0, allow_inf_nan=False, strict=True)
     max_bytes_per_source: int = Field(default=500_000_000, gt=0, strict=True)
+    max_pages_per_batch: int = Field(default=1000, ge=1, strict=True)
+    max_documents_per_batch: int = Field(default=1000, ge=1, strict=True)
+    max_bytes_per_batch: int = Field(default=500_000_000, gt=0, strict=True)
 
 
 class WebSettings(SettingsModel):
@@ -347,6 +351,16 @@ class SourceConfig(BaseModel):
     entry: str
     allowed_hosts: list[str] = Field(min_length=1)
     listing_date_kind: str
+    authority_id: str = ""
+    publisher: str = ""
+    region: str = "全国"
+    categories: list[str] = Field(default_factory=list)
+    channel: str = "policy"
+    adapter: Literal["mof", "chinatax", "public_html", "public_browser"] = "public_html"
+    profile: dict[str, Any] = Field(default_factory=dict)
+    verification_status: str = "needs_validation"
+    verification_note: str = "尚未完成当前网络环境的真实链路验证"
+    registry_version: str = "2026-11-06"
 
 
 class SourceRegistry(BaseModel):
@@ -363,4 +377,15 @@ def load_sources() -> SourceRegistry:
         path = package_root().parents[1] / "config" / "sources.yaml"
     if not path.is_file():
         raise FileNotFoundError(f"缺少来源配置: {path}")
-    return SourceRegistry.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
+    return _parse_sources(path.read_bytes()).model_copy(deep=True)
+
+
+@lru_cache(maxsize=4)
+def _parse_sources(content: bytes) -> SourceRegistry:
+    # Keyed by full trusted file contents, so edits (even same-size/same-mtime)
+    # cannot reuse stale trust. Return copies to keep callers independent.
+    payload = yaml.safe_load(content)
+    for key in ("mof", "chinatax"):
+        if key in payload["sources"]:
+            payload["sources"][key].setdefault("adapter", key)
+    return SourceRegistry.model_validate(payload)

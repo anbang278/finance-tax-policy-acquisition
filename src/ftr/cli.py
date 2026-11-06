@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sqlite3
 import sys
 from contextlib import closing
@@ -17,7 +18,7 @@ from ftr.models import OperationResponse, SemanticDecision, TaskRequest
 from ftr.network import resolve_proxy
 from ftr.repair import candidate_report, prepare_candidate
 from ftr.repository import Repository
-from ftr.research import ResearchDraft, verify_and_render
+from ftr.research import ResearchContext, ResearchDraft, assess_and_render
 from ftr.runtime import Collector, data_lock
 
 
@@ -48,7 +49,17 @@ def parser() -> argparse.ArgumentParser:
             )
     collect = commands.add_parser("collect")
     collect.add_argument("--request", type=Path)
-    collect.add_argument("--sources", nargs="+", choices=["mof", "chinatax"])
+    collect.add_argument(
+        "--preview", action="store_true", help="预览并冻结栏目、日期口径及预算；不创建数据目录"
+    )
+    catalog = commands.add_parser("sources", help="查看登记来源与实际验证状态")
+    catalog.add_argument("--region")
+    catalog.add_argument("--authority")
+    catalog.add_argument("--category")
+    collect.add_argument(
+        "--urls-file", type=Path, help="官方定向清单JSON数组，含source_id/url/title/topic_id/reason"
+    )
+    collect.add_argument("--sources", nargs="+", choices=list(load_sources().sources))
     collect.add_argument("--date-from", type=date.fromisoformat)
     collect.add_argument("--date-to", type=date.fromisoformat)
     collect.add_argument(
@@ -56,7 +67,9 @@ def parser() -> argparse.ArgumentParser:
         choices=["source_listing", "issued_date", "published_date"],
         default=None,
     )
-    collect.add_argument("--mode", choices=["initial", "incremental", "backfill", "rescan"])
+    collect.add_argument(
+        "--mode", choices=["initial", "incremental", "backfill", "rescan", "targeted"]
+    )
     collect.add_argument("--max-pages", type=int)
     collect.add_argument("--max-documents", type=int)
     collect.add_argument("--idempotency-key")
@@ -91,12 +104,14 @@ def parser() -> argparse.ArgumentParser:
     rule.add_argument("--live", action="store_true", help="原任务范围内真实来源验证；需采集授权")
     repair.add_parser("activate-rule").add_argument("--candidate", required=True)
     repair.add_parser("rollback-rule").add_argument(
-        "--source", choices=["mof", "chinatax"], required=True
+        "--source", choices=list(load_sources().sources), required=True
     )
     candidate = commands.add_parser("candidate").add_subparsers(dest="action", required=True)
     candidate.add_parser("report").add_argument("--candidate", required=True)
     research = commands.add_parser("research").add_subparsers(dest="action", required=True)
-    research.add_parser("prepare").add_argument("--query", required=True)
+    prepare = research.add_parser("prepare")
+    prepare.add_argument("--query", required=True)
+    prepare.add_argument("--context", type=Path, help="研究背景JSON，区分所属期、申报日与指定法源")
     research.add_parser("submit").add_argument("--file", required=True, type=Path)
     export = commands.add_parser("export")
     export.add_argument("--query", required=True)
@@ -109,7 +124,7 @@ def parser() -> argparse.ArgumentParser:
     restore.add_argument("--target", required=True, type=Path)
     release = commands.add_parser("release").add_subparsers(dest="action", required=True)
     release.add_parser("status").add_argument(
-        "--adapter", choices=["mof", "chinatax"], required=True
+        "--adapter", choices=list(load_sources().sources), required=True
     )
     update = commands.add_parser("update", help="官方 main 更新检测（仅提醒）").add_subparsers(
         dest="action", required=True
@@ -128,7 +143,7 @@ def parser() -> argparse.ArgumentParser:
     scheduler.add_parser("status", help="只读查看计划、心跳、积压与来源异常")
     scheduler.add_parser("preview", help="只读预览执行时点与冻结日期窗口")
     scheduler.add_parser("resume", help="处理故障后恢复来源，不清除人工任务标记").add_argument(
-        "--source", choices=["mof", "chinatax"], required=True
+        "--source", choices=list(load_sources().sources), required=True
     )
     return root
 
@@ -256,6 +271,17 @@ def run(args: argparse.Namespace) -> OperationResponse:
         return OperationResponse(
             operation=f"task {args.action}", task_id=args.task, status="STOP_REQUESTED"
         )
+    if args.command == "sources":
+        from ftr.sources import catalog_entries
+
+        items = [
+            item
+            for item in catalog_entries()
+            if (not args.region or item["region"] == args.region)
+            and (not args.authority or item["authority_id"] == args.authority)
+            and (not args.category or args.category in item["categories"])
+        ]
+        return OperationResponse(operation="sources", status="COMPLETED", data={"items": items})
     if args.command == "doctor":
         sources = load_sources()
         report = environment_report(settings)
@@ -366,21 +392,50 @@ def run(args: argparse.Namespace) -> OperationResponse:
                     "date_basis",
                     "mode",
                     "idempotency_key",
+                    "urls_file",
                 )
             ):
                 raise ValueError("--request 不能与来源、日期、预算或幂等参数同时使用")
             request = TaskRequest.model_validate_json(args.request.read_text(encoding="utf-8"))
         else:
+            targets = (
+                json.loads(args.urls_file.read_text(encoding="utf-8")) if args.urls_file else []
+            )
+            if not isinstance(targets, list):
+                raise ValueError("定向清单须为JSON数组")
+            if args.urls_file and not targets:
+                raise ValueError("定向清单不能为空")
             request = TaskRequest(
-                source_ids=args.sources or ["mof", "chinatax"],
+                source_ids=args.sources
+                or (
+                    list(dict.fromkeys(t["source_id"] for t in targets))
+                    if targets
+                    else ["mof", "chinatax"]
+                ),
                 date_from=args.date_from,
                 date_to=args.date_to,
                 date_basis=args.date_basis or "source_listing",
-                mode=args.mode or "initial",
+                mode=args.mode or ("targeted" if targets else "initial"),
+                official_urls=targets,
                 max_pages=settings.collection.max_pages,
                 max_documents=settings.collection.max_documents,
                 idempotency_key=args.idempotency_key,
             )
+    if args.command == "collect" and args.preview:
+        assert request is not None
+        from ftr.sources import freeze_scope
+
+        frozen = request.model_copy(
+            update={"source_snapshot": freeze_scope(request.source_ids, request.source_snapshot)}
+        )
+        return OperationResponse(
+            operation="collect_preview",
+            status="PREVIEW",
+            data={
+                "request": frozen.model_dump(mode="json"),
+                "budget": settings.collection.model_dump(mode="json"),
+            },
+        )
     with data_lock(root):
         repo = Repository(root)
         try:
@@ -567,7 +622,7 @@ def read_operation(args, root):
             return OperationResponse(
                 operation="research submit",
                 status="COMPLETED",
-                data={"markdown": verify_and_render(repo, draft)},
+                data=assess_and_render(repo, draft),
             )
         records = repo.search(args.query, getattr(args, "include_limited", False))
         if args.command == "export":
@@ -588,7 +643,18 @@ def read_operation(args, root):
             data={
                 "records": [x.model_dump(mode="json") for x in records],
                 **(
-                    {"query": args.query, "warning": "仅验证资料入选；陈述支持关系仍须语义复核"}
+                    {
+                        "query": args.query,
+                        "context": (
+                            ResearchContext.model_validate_json(
+                                args.context.read_text(encoding="utf-8")
+                            )
+                            if args.context
+                            else ResearchContext()
+                        ).model_dump(mode="json"),
+                        "research_schema": ResearchDraft.model_json_schema(),
+                        "warning": "请独立复核每项陈述的支持性、条件、时点与指定法源，并绑定输入摘要",
+                    }
                     if args.command == "research"
                     else {}
                 ),

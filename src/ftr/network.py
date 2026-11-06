@@ -18,6 +18,12 @@ from ftr.config import NetworkSettings, validate_proxy_url
 _UNSET = object()
 
 
+@lru_cache(maxsize=64)
+def shared_host_requests(data_dir: str) -> dict[str, float]:
+    """Keep source-column throttles across successive collectors in one writer."""
+    return {}
+
+
 def resolve_proxy(settings: NetworkSettings) -> str | None:
     if settings.proxy_mode == "direct":
         return None
@@ -58,6 +64,17 @@ class AccessBlocked(RuntimeError):
     pass
 
 
+class BudgetReached(RuntimeError):
+    def __init__(self, message, code="BUDGET_REACHED"):
+        super().__init__(message)
+        self.code = code
+
+
+def check_byte_budget(size: int, remaining_bytes: int | None) -> None:
+    if remaining_bytes is not None and size > remaining_bytes:
+        raise BudgetReached("响应超过来源或整批剩余字节预算，请续跑")
+
+
 class TransientFailure(RuntimeError):
     """An exhausted transient request, never an access or trust-boundary failure."""
 
@@ -68,6 +85,14 @@ class RetryPolicy:
         self.retry_backoff = settings.retry_backoff_seconds if settings else 1
         self.before_request = None
         self.checkpoint = None
+        self.host_requests: dict[str, float] = {}
+        self.public_browser_service_workers_blocked = False
+        self.remaining_bytes: int | None = None
+
+    def _check_size(self, size):
+        if size > self.max_bytes:
+            raise AccessBlocked("文件超过单文件上限")
+        check_byte_budget(size, self.remaining_bytes)
 
     def _check(self):
         if self.checkpoint is not None:
@@ -84,6 +109,11 @@ class RetryPolicy:
 
     def _before(self, url):
         self._check()
+        host = urlsplit(url).hostname or ""
+        remaining = self.interval - (time.monotonic() - self.host_requests.get(host, 0))
+        if remaining > 0:
+            self._wait(remaining)
+        self.host_requests[host] = time.monotonic()
         if self.before_request is not None:
             self.before_request(url)
 
@@ -218,13 +248,12 @@ class BoundedClient(RetryPolicy):
                 except httpx.HTTPStatusError as exc:
                     raise RuntimeError(f"来源响应异常，HTTP {response.status_code}: {url}") from exc
                 claimed = response.headers.get("content-length")
-                if claimed and int(claimed) > self.max_bytes:
-                    raise AccessBlocked("文件超过单文件上限")
+                if claimed:
+                    self._check_size(int(claimed))
                 body = bytearray()
                 for chunk in response.iter_bytes():
                     body.extend(chunk)
-                    if len(body) > self.max_bytes:
-                        raise AccessBlocked("文件超过单文件上限")
+                    self._check_size(len(body))
                 return bytes(body), str(response.url), response.headers.get("content-type", "")
         raise AccessBlocked("重定向次数超过上限")
 
@@ -315,14 +344,13 @@ class BrowserSessionClient(RetryPolicy):
                 except requests.RequestException as exc:
                     raise RuntimeError(f"来源响应异常，HTTP {response.status_code}: {url}") from exc
                 claimed = response.headers.get("content-length")
-                if claimed and int(claimed) > self.max_bytes:
-                    raise AccessBlocked("文件超过单文件上限")
+                if claimed:
+                    self._check_size(int(claimed))
                 body = bytearray()
                 try:
                     for chunk in response.iter_content(chunk_size=65536):
                         body.extend(chunk)
-                        if len(body) > self.max_bytes:
-                            raise AccessBlocked("文件超过单文件上限")
+                        self._check_size(len(body))
                 except requests.RequestException as exc:
                     raise RuntimeError(f"来源下载中断: {url}") from exc
                 return bytes(body), response.url, response.headers.get("content-type", "")

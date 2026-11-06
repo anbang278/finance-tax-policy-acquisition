@@ -235,6 +235,10 @@ def test_repository_versions_and_stale_decision(tmp_path):
     assert len(repo.pending_refs(task_id, "mof")) == 1
     with pytest.raises(ValueError):
         repo.create_task(request.model_copy(update={"query": "changed"}))
+    evidence = EvidenceStore(tmp_path).save(
+        "完整正文".encode(), "https://kjs.mof.gov.cn/a", "https://kjs.mof.gov.cn/a", "text/html"
+    )
+    repo.save_evidence(evidence)
     record = DocumentRecord(
         source_id="mof",
         source_url="https://kjs.mof.gov.cn/a",
@@ -245,7 +249,7 @@ def test_repository_versions_and_stale_decision(tmp_path):
         listing_date_kind="column_date",
         body_text="完整正文",
         body_sha256=digest("完整正文".encode()),
-        evidence_id="raw-a",
+        evidence_id=evidence.evidence_id,
     )
     record_id, created = repo.add_document(task_id, record)
     assert created
@@ -256,7 +260,7 @@ def test_repository_versions_and_stale_decision(tmp_path):
         record_id=record_id,
         input_digest=digest(record.model_dump_json().encode()),
         excerpt="完整正文",
-        evidence_id="raw-a",
+        evidence_id=evidence.evidence_id,
     )
     repo.add_decision(decision)
     with pytest.raises(ValueError):
@@ -266,7 +270,7 @@ def test_repository_versions_and_stale_decision(tmp_path):
                 input_digest="wrong",
                 result="PASS",
                 reasons=["ok"],
-                evidence_ids=["raw-a"],
+                evidence_ids=[evidence.evidence_id],
             )
         )
     accepted = SemanticDecision(
@@ -274,7 +278,7 @@ def test_repository_versions_and_stale_decision(tmp_path):
         input_digest=decision.input_digest,
         result="PASS",
         reasons=["已核对"],
-        evidence_ids=["raw-a"],
+        evidence_ids=[evidence.evidence_id],
     )
     assert repo.submit_decision(accepted).quality_state == "validated"
     assert repo.submit_decision(accepted).quality_state == "validated"
@@ -285,7 +289,11 @@ def test_repository_versions_and_stale_decision(tmp_path):
             Claim(
                 text="资料包含完整正文",
                 kind="原文摘录",
-                citations=[Citation(record_id=record_id, evidence_id="raw-a", quote="完整正文")],
+                citations=[
+                    Citation(
+                        record_id=record_id, evidence_id=evidence.evidence_id, quote="完整正文"
+                    )
+                ],
             )
         ],
     )
@@ -300,7 +308,11 @@ def test_repository_versions_and_stale_decision(tmp_path):
                             text="错误引用",
                             kind="原文摘录",
                             citations=[
-                                Citation(record_id=record_id, evidence_id="raw-a", quote="虚构摘录")
+                                Citation(
+                                    record_id=record_id,
+                                    evidence_id=evidence.evidence_id,
+                                    quote="虚构摘录",
+                                )
                             ],
                         )
                     ]
@@ -309,7 +321,7 @@ def test_repository_versions_and_stale_decision(tmp_path):
         )
     changed = record.model_copy(update={"record_id": "second", "evidence_id": "raw-b"})
     assert repo.add_document(task_id, changed)[1]
-    assert repo.get_document(record_id).evidence_id == "raw-a"
+    assert repo.get_document(record_id).evidence_id == evidence.evidence_id
     assert repo.search("完整正文") == []
     repo.close()
 

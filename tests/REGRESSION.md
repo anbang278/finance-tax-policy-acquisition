@@ -74,3 +74,25 @@ test_update_check.py 使用 HTTP 替身和临时缓存验证提交关系、离�
 ## 知识与 Wiki（2026-10-22）
 
 新增 test_knowledge.py，覆盖 v5/早期迁移与故障回滚、正文/文本 PDF/中文索引、知识与 Wiki 版本、宿主与 API 共用回传、独立预审、人工确认、草稿/维护章节保护、来源影响、结果幂等和持久回放、长结果与备份。完整 Chromium 模式参数化 1440/390px 跑创建至发布导出；可选 KNOWLEDGE_AUDIT_EVIDENCE 输出截图。所有内容虚构并使用新临时目录；MockTransport 不证明真实供应商网络。验收边界见 docs/verification/knowledge-wiki-acceptance.md。
+
+## 企业所得税专题研究（2026-11-06）
+
+test_topic_research覆盖官方清单、旧任务及旧回传幂等、政策身份、预览、时间与引用、关系影响关闭、只读预览并发。test_knowledge完整Chromium流程增加候选编纂导出、政策归组和研究报告预览下载。schema当前为6，独立wheel按同一版本校验。实际源站请求和已捕获官方原件回放分别落盘，模型的三轮同线程结果只说明限定用例。
+
+
+## 来源目录扩展回归（2026-11-06）
+
+新增专项入口：
+
+```sh
+uv run --extra dev --extra web pytest -q tests/test_source_expansion.py tests/test_public_adapters.py tests/test_source_schedule.py tests/test_source_integration.py
+FTR_WEB_BROWSER=1 uv run --extra dev --extra web pytest -q tests/test_source_integration.py -k browser_source_catalog
+```
+
+上述用例使用临时库、虚构栏目/正文、受控 HTTP 或隔离浏览器服务。覆盖来源目录与快照、公共适配器、旧请求/旧计划/v7、三来源以上公平轮转、单源故障/主机信任收紧、同主机请求间隔及每源/整批预算。字节回归须同时覆盖已取得但日期排除的正文、缺失附件恢复、额外原始导航响应，避免只检查最终保存资料数。
+
+浏览器用例分别固定 1440px 与 390px，按语义来源和筛选结果定位，不写固定目录总数；核对冻结预览与下载请求、导入本轮选源不改变日常计划、无横向溢出、无实际采集命令。临时服务退出后清理自身会话，不复用用户现有端口或资料目录。
+
+完整工程回归继续执行本页既有命令；schema 预期为 v7，构建/独立 wheel 须包含受控来源、待接入目录与公共适配器资源。上述工程结果不证明 36 局全部栏目通过或真实历史覆盖，真实链路状态及证据见[来源扩展验证目录](../docs/verification/source-expansion/)。
+
+最终浏览器回归另覆盖WS零上游握手及关闭不挂、DOM缺省翻页参数、限速与主动等待预算分离、取消未返回响应、缺原始响应禁止复核，以及信息性采集说明不阻断无硬缺口资料的人工复核。真实资料只读资格检查不等于提交复核结论。

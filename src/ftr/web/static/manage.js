@@ -7,6 +7,9 @@ const downloads={saved:'已保存',failed:'下载失败',blocked:'访问或预�
 const extraction={text:'文本已提取',unsupported:'格式暂不支持',scanned:'扫描件未解析',failed:'提取失败',pending:'待解析'};
 let authorized = false, plan = null, current = null, category = 'pending', previewed = null, dirtyPlan = false, dirtyReview = false;
 let busy = false, selected = null, lastCommand = null, lastState = null;
+let sourceCatalog = [];
+let pendingNowSelection = null;
+let formRevision = 0, previewRevision = null, previewScopeDigest = null;
 const pendingCommands = new Map();
 export function selectReview(id) {if (id && id !== selected) {selected=id;dirtyReview=false;}}
 async function get(path, body) {
@@ -32,25 +35,29 @@ export async function bootstrapManagement() {
 }
 function configFromForm() {
   const f = $('#schedule-form');
-  return {enabled:$('#schedule-enabled').checked, timezone:f.elements.timezone.value,
+  return {schema_version:'2',scope:{source_ids:[...f.querySelectorAll('[name="plan-source"]:checked')].map(x=>x.value)},settings:{enabled:$('#schedule-enabled').checked, timezone:f.elements.timezone.value,
     times:f.elements.times.value.split(/[,，\s]+/).filter(Boolean),lookback_days:Number(f.elements.lookback_days.value),
     batch_interval_seconds:Number(f.elements.batch_interval_seconds.value),
-    retry_delays_seconds:f.elements.retry_delays_seconds.value.split(/[,，\s]+/).filter(Boolean).map(Number)};
+    retry_delays_seconds:f.elements.retry_delays_seconds.value.split(/[,，\s]+/).filter(Boolean).map(Number)}};
 }
-async function command(action,payload,expected_revision) {
+async function command(action,payload,expected_revision,scope_digest) {
   if (!authorized) throw new Error('只读模式：请通过本机管理入口重新打开');
-  const signature=JSON.stringify({action,payload,expected_revision});
+  const signature=JSON.stringify({action,payload,expected_revision,scope_digest});
   const id=pendingCommands.get(signature)||crypto.randomUUID().replaceAll('-','');
   pendingCommands.set(signature,id);
-  const result = await get('/api/manage/commands',{id,action,payload,expected_revision});
+  const result = await get('/api/manage/commands',{id,action,payload,expected_revision,scope_digest});
   lastCommand=result.id;lastState='QUEUED';
   $('#management-operations').open=true;
   message(`操作 ${result.id.slice(0,8)} 已排队，等待后台实际执行。`);
   return result;
 }
+function sourceOptions(name, ids) {
+  return sourceCatalog.map(source=>`<label class="check"><input type="checkbox" name="${name}" value="${esc(source.source_id)}" ${ids.includes(source.source_id)?'checked':''} ${source.selectable===false?'disabled':''}>${esc(source.name)} <small>${esc(source.verification_status||'待验证')} ${esc(source.verification_note||'')}</small></label>`).join('');
+}
 function form() {
+  formRevision=plan.revision;
   const s = plan.settings;
-  $('#schedule-form').innerHTML = `<fieldset ${authorized?'':'disabled'}><label class="check"><input id="schedule-enabled" type="checkbox" ${s.enabled?'checked':''}>启用日常计划</label><div class="management-fields"><label>执行时间<input name="times" value="${esc(s.times.join(', '))}" required placeholder="09:00, 18:00"></label><label>时区<input name="timezone" value="${esc(s.timezone)}" required></label><label>回看天数（含当天）<input name="lookback_days" type="number" min="1" max="366" value="${s.lookback_days}" required></label></div><details><summary>高级设置</summary><div class="management-fields"><label>批次间隔（秒）<input name="batch_interval_seconds" type="number" min="1" value="${s.batch_interval_seconds}" required></label><label>跨批重试等待（秒，最多三次）<input name="retry_delays_seconds" value="${esc(s.retry_delays_seconds.join(', '))}"></label></div></details><div class="management-actions"><button class="button" type="button" data-manage="preview">预览计划</button><button class="button" type="submit" id="save-plan" disabled>确认预览并保存</button><button class="button subtle" type="button" data-manage="${s.enabled?'disable':'enable'}">${s.enabled?'停用计划':'启用计划'}</button></div></fieldset>`;
+  $('#schedule-form').innerHTML = `<fieldset ${authorized?'':'disabled'}><fieldset><legend>日常计划来源（新增登记不会自动加入）</legend>${sourceOptions('plan-source',plan.scope.source_ids)}</fieldset><label class="check"><input id="schedule-enabled" type="checkbox" ${s.enabled?'checked':''}>启用日常计划</label><div class="management-fields"><label>执行时间<input name="times" value="${esc(s.times.join(', '))}" required placeholder="09:00, 18:00"></label><label>时区<input name="timezone" value="${esc(s.timezone)}" required></label><label>回看天数（含当天）<input name="lookback_days" type="number" min="1" max="366" value="${s.lookback_days}" required></label></div><details><summary>高级设置</summary><div class="management-fields"><label>批次间隔（秒）<input name="batch_interval_seconds" type="number" min="1" value="${s.batch_interval_seconds}" required></label><label>跨批重试等待（秒，最多三次）<input name="retry_delays_seconds" value="${esc(s.retry_delays_seconds.join(', '))}"></label></div></details><div class="management-actions"><button class="button" type="button" data-manage="preview">预览计划</button><button class="button" type="submit" id="save-plan" disabled>确认预览并保存</button><button class="button subtle" type="button" data-manage="${s.enabled?'disable':'enable'}">${s.enabled?'停用计划':'启用计划'}</button></div></fieldset>`;
 }
 export async function refreshManagement(view) {
   if (busy) return;
@@ -63,15 +70,25 @@ export async function refreshManagement(view) {
     for (const [signature,id] of pendingCommands) if(op.items.some(x=>x.id===id&&['APPLIED','FAILED'].includes(x.state)))pendingCommands.delete(signature);
     $('#operation-list').innerHTML = op.items.slice(0,20).map(x=>`<li><strong>${esc(labels[x.state]||x.state)}</strong> ${esc(actions[x.action]||x.action)} · ${esc(x.id.slice(0,8))}<small>${esc(x.result?.message||(x.result?.next_attempt_at?`部分内容已保存，下批 ${new Date(x.result.next_attempt_at).toLocaleTimeString()}`:x.result?.draft_saved?'草稿已保存，质量状态不变':x.result?.quality_state?`本轮结论：${({validated:'通过',rejected:'排除',quarantined:'需进一步核查'})[x.result.quality_state]}`:x.result?.revision?`已应用版本 ${x.result.revision}`:x.result?.needs_review?'补取完成，新版本需要重新复核':''))}</small>${x.result?.record_id?`<a href="#reviews/${esc(x.result.record_id)}">查看补取版本与复核</a>`:''}</li>`).join('') || '<li>尚无管理操作</li>';
     if (view === 'scheduler') {
-      const [saved,status] = await Promise.all([get('/api/manage/plan'),get('/api/scheduler')]);
-      const changed = !plan || saved.revision !== plan.revision;
+      const [saved,status,catalog] = await Promise.all([get('/api/manage/plan'),get('/api/scheduler'),get('/api/sources')]);
+      if (plan && saved.revision < plan.revision) return;
+      sourceCatalog=catalog.items;
+      const changed = !plan || saved.revision !== formRevision;
       plan=saved;
+      if ($('#run-now').dataset.window && Number($('#run-now').dataset.revision)!==saved.revision) {
+        $('#run-now').dataset.window=''; $('#run-now').disabled=true;
+        $('#run-window').textContent='计划版本已变化，请重新预览本轮窗口。';
+      }
       $('#plan-state').textContent = `来源：${saved.config_source} · 保存版本 ${saved.saved_revision??saved.revision} · 已应用版本 ${saved.applied_revision}${saved.pending_operation_id?' · 等待检查点应用':''} · 后台 ${saved.worker.state} · 心跳 ${status.heartbeat_fresh?'新鲜':'未观察到 / 已过期'}`;
       if (changed && !dirtyPlan || !$('#schedule-form').children.length) form();
+      if (!$('#now-source-options').children.length) $('#now-source-options').innerHTML=sourceOptions('now-source',pendingNowSelection||saved.scope.source_ids);
+      $('#now-source-options').querySelectorAll('input').forEach(input=>{input.disabled=!authorized||sourceCatalog.find(x=>x.source_id===input.value)?.selectable===false;});
       $('#next-schedule').textContent = status.next_run_at ? `下次执行：${new Date(status.next_run_at).toLocaleString()} · ${status.next_window.date_from} 至 ${status.next_window.date_to}` : '日常计划已停用；可以明确立即获取一轮。';
-      $('#source-controls').innerHTML = ['mof','chinatax'].map(source=>{
+      const observedIds=[...new Set([...saved.scope.source_ids,...status.sources.map(x=>x.source_id)])];
+      $('#source-controls').innerHTML = observedIds.map(source=>{
         const state=status.sources.find(x=>x.source_id===source)||{};
-        return `<article class="management-card"><h3>${source==='mof'?'财政部':'国家税务总局'}</h3><p>日期口径：${source==='mof'?'栏目日期':'成文日期'}</p><p>${state.user_paused?'来源由本人暂停':state.paused_reason?`来源受阻：${esc(state.paused_reason)}`:state.active_task_id?'正在采集 / 检查点保留':'等待下一轮'}</p><p>活动窗口：${state.prepared_request?esc(state.prepared_request.date_from+' 至 '+state.prepared_request.date_to):'无'} · 已扫描 ${state.report?.sources?.[0]?.pages_scanned||0} 页 · 保存 ${state.report?.sources?.[0]?.documents_saved||0} 条</p><p>待补漏：${state.pending_window?esc(state.pending_window.date_from+' 至 '+state.pending_window.date_to):'无'}</p>${state.active_task_id?`<a href="#tasks/${esc(state.active_task_id)}">查看当前任务</a>`:''}<p>${esc(state.last_result?.status||'尚无执行结果')} · ${state.report?.completion?.coverage==='COMPLETE'?'采集完成 · 待复核另行处理':''}</p><button class="button subtle" ${authorized?'':'disabled'} data-managed-source="${source}" data-source-action="${state.user_paused||state.paused_reason?'resume':'pause'}" data-revision="${state.management_revision||0}">${state.user_paused||state.paused_reason?'处理后恢复来源':'暂停来源'}</button></article>`;
+        const metadata=sourceCatalog.find(x=>x.source_id===source)||{name:source};
+        return `<article class="management-card"><h3>${esc(metadata.name)}</h3><p>日期口径：${esc(metadata.listing_date_kind||'未知')}</p><p>${state.scope_removed&&!state.explicit_run?'已移出日常范围，检查点保留':state.user_paused?'来源由本人暂停':state.paused_reason?`来源受阻：${esc(state.paused_reason)}`:state.active_task_id?'正在采集 / 检查点保留':'等待下一轮'}</p><p>活动窗口：${state.prepared_request?esc(state.prepared_request.date_from+' 至 '+state.prepared_request.date_to):'无'} · 已扫描 ${state.report?.sources?.[0]?.pages_scanned||0} 页 · 保存 ${state.report?.sources?.[0]?.documents_saved||0} 条</p><p>待补漏：${state.pending_window?esc(state.pending_window.date_from+' 至 '+state.pending_window.date_to):'无'}</p>${state.active_task_id?`<a href="#tasks/${esc(state.active_task_id)}">查看当前任务</a>`:''}<p>${esc(state.last_result?.status||'尚无执行结果')} · ${state.report?.completion?.coverage==='COMPLETE'?'采集完成 · 待复核另行处理':''}</p><button class="button subtle" ${authorized?'':'disabled'} data-managed-source="${source}" data-source-action="${state.user_paused||state.paused_reason?'resume':'pause'}" data-revision="${state.management_revision||0}">${state.user_paused||state.paused_reason?'处理后恢复来源':'暂停来源'}</button></article>`;
       }).join('');
     } else {
       const queue=await get('/api/reviews?category='+category);
@@ -103,10 +120,10 @@ async function action(event) {
     button.disabled=true;
     if (button.dataset.sourceAction) await command('source.'+button.dataset.sourceAction,{source_id:button.dataset.managedSource},Number(button.dataset.revision));
     const a=button.dataset.manage;
-    if (a==='preview') {const value=configFromForm(); const data=await get('/api/manage/preview',value);previewed=JSON.stringify(value); $('#schedule-preview').textContent=data.upcoming.map(x=>`${new Date(x.at).toLocaleString('zh-CN',{timeZone:value.timezone})} (${value.timezone})：${x.window.date_from} 至 ${x.window.date_to}`).join('；');$('#save-plan').disabled=false;}
+    if (a==='preview') {const value=configFromForm();if(!value.scope.source_ids.length)throw new Error('至少选择一个日常计划来源'); const data=await get('/api/manage/preview',value);previewed=JSON.stringify(value);previewRevision=formRevision;previewScopeDigest=data.scope_digest; $('#schedule-preview').textContent=data.upcoming.map(x=>`${new Date(x.at).toLocaleString('zh-CN',{timeZone:value.settings.timezone})} (${value.settings.timezone})：${x.window.date_from} 至 ${x.window.date_to}`).join('；')+' · 来源：'+value.scope.source_ids.join(', ');$('#save-plan').disabled=false;}
     if (a==='enable'||a==='disable') await command('plan.'+a,{},plan.revision);
-    if (a==='now-preview') {const p=await get('/api/manage/preview',plan.settings); const sources=[...document.querySelectorAll('[name="now-source"]:checked')].map(x=>x.value); if(!sources.length)throw new Error('至少选择一个来源');$('#run-window').textContent=`本轮 ${p.startup_window.date_from} 至 ${p.startup_window.date_to} · ${sources.join(', ')}。合并已有补漏，不改变活动任务范围。`; $('#run-now').dataset.window=JSON.stringify({...p.startup_window,sources});$('#run-now').disabled=false;}
-    if (a==='now') {await command('plan.now',JSON.parse(button.dataset.window),plan.revision);button.dataset.window='';}
+    if (a==='now-preview') {const sources=[...document.querySelectorAll('[name="now-source"]:checked')].map(x=>x.value); if(!sources.length)throw new Error('至少选择一个来源');const latest=await get('/api/manage/plan');if(latest.pending_operation_id)throw new Error('计划变更尚待应用，请在生效后重新预览');plan=latest;const p=await get('/api/manage/preview',{schema_version:'2',settings:latest.settings,scope:{source_ids:sources}});$('#run-window').textContent=`本轮 ${p.startup_window.date_from} 至 ${p.startup_window.date_to} · ${sources.join(', ')}。合并已有补漏，不改变活动任务范围。`; $('#run-now').dataset.window=JSON.stringify({...p.startup_window,sources});$('#run-now').dataset.revision=String(latest.revision);$('#run-now').dataset.scopeDigest=p.scope_digest;$('#run-now').disabled=false;}
+    if (a==='now') {await command('plan.now',JSON.parse(button.dataset.window),Number(button.dataset.revision),button.dataset.scopeDigest);button.dataset.window='';}
     if (a==='draft') {await command('review.draft',reviewPayload(false),current.revision);dirtyReview=false;}
     if (a==='reopen'||a==='recover') {await command('review.'+a,{record_id:current.record_id,input_digest:current.input_digest},current.revision);dirtyReview=false;}
   } catch(e) {message(e.message,true);} finally {if (button.dataset.manage!=='now') button.disabled=!authorized;}
@@ -114,8 +131,17 @@ async function action(event) {
 document.addEventListener('click',action);
 document.addEventListener('input',e=>{if(e.target.closest('#schedule-form')){dirtyPlan=true;previewed=null;$('#save-plan').disabled=true;}if(e.target.closest('#review-form'))dirtyReview=true;});
 document.addEventListener('change',e=>{if(e.target.id==='review-category'){category=e.target.value;selected=null;dirtyReview=false;refreshManagement('reviews');}if(e.target.name==='now-source')$('#run-now').disabled=true;});
+document.addEventListener('ftr-source-selection',event=>{
+  const ids=event.detail?.source_ids;
+  if(!Array.isArray(ids)||!ids.every(id=>typeof id==='string'))return;
+  pendingNowSelection=[...new Set(ids)];
+  document.querySelectorAll('[name="now-source"]').forEach(input=>{input.checked=ids.includes(input.value)&&sourceCatalog.find(x=>x.source_id===input.value)?.selectable!==false;});
+  $('#run-now').disabled=true;
+  $('#run-now').dataset.window='';
+  $('#run-window').textContent='来源选择已更新，请重新预览本轮窗口；日常计划范围不变。';
+});
 document.addEventListener('submit',async e=>{
   if(!['schedule-form','review-form'].includes(e.target.id))return;
   e.preventDefault();const button=e.target.querySelector('[type="submit"]');button.disabled=true;
-  try {if(e.target.id==='schedule-form'){const value=configFromForm();if(JSON.stringify(value)!==previewed)throw new Error('请先预览当前计划');await command('plan.save',value,plan.revision);dirtyPlan=false;}else{await command('review.submit',reviewPayload(true),current.revision);dirtyReview=false;}}catch(error){message(error.message,true);button.disabled=false;}
+  try {if(e.target.id==='schedule-form'){const value=configFromForm();if(JSON.stringify(value)!==previewed)throw new Error('请先预览当前计划');await command('plan.save',value,previewRevision,previewScopeDigest);dirtyPlan=false;}else{await command('review.submit',reviewPayload(true),current.revision);dirtyReview=false;}}catch(error){message(error.message,true);button.disabled=false;}
 });

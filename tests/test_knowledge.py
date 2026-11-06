@@ -216,7 +216,7 @@ def test_readonly_old_database_does_not_migrate(tmp_path):
         assert Knowledge(repo).listing("domains") == [] or Knowledge(repo).listing("domains")
     assert (tmp_path / "database.sqlite3").read_bytes() == before
     with closing(Repository(tmp_path)) as repo:
-        assert repo.db.execute("PRAGMA user_version").fetchone()[0] == 5
+        assert repo.db.execute("PRAGMA user_version").fetchone()[0] == 7
 
 
 def test_api_success_and_no_write_lock_during_call(kb):
@@ -769,6 +769,146 @@ def test_knowledge_cli_and_web_share_atomic_commands(kb, tmp_path):
 @pytest.mark.skipif(
     __import__("os").environ.get("FTR_WEB_BROWSER") != "1", reason="需要完整 Chromium 模式"
 )
+@pytest.mark.parametrize("selected_kind", ["object", "job"])
+@pytest.mark.parametrize("delayed_stage", ["detail", "overview", "selection"])
+def test_browser_wiki_refresh_cannot_replace_new_selection(kb, selected_kind, delayed_stage):
+    from urllib.parse import urlsplit
+
+    from fastapi.testclient import TestClient
+    from playwright.sync_api import expect, sync_playwright
+
+    from ftr.web.app import create_app
+
+    k, record = kb
+    version = candidate(k, record)
+    approve(k, version)
+    object_id = k.version(version)["object_id"]
+    job = k.create_job("compile", "cit-conditions", [], knowledge_versions=[version])
+    ids = {"object": object_id, "job": job["id"]}
+    previous_kind = "job" if selected_kind == "object" else "object"
+    previous_path = f"/api/knowledge/{previous_kind}s/{ids[previous_kind]}"
+    selected_path = f"/api/knowledge/{selected_kind}s/{ids[selected_kind]}"
+    requested = []
+
+    with (
+        TestClient(create_app(k.root), base_url="http://127.0.0.1") as client,
+        sync_playwright() as playwright,
+    ):
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 390, "height": 1000})
+        errors = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
+
+        def respond(route):
+            path = urlsplit(route.request.url).path
+            requested.append(path)
+            if path == "/api/manage/session":
+                route.fulfill(json={"authorized": True})
+            elif path == "/api/manage/operations":
+                route.fulfill(json={"items": []})
+            else:
+                response = client.get(path)
+                assert response.status_code == 200, path
+                route.fulfill(
+                    status=response.status_code,
+                    body=response.content,
+                    headers={"content-type": response.headers["content-type"]},
+                )
+
+        page.route("http://wiki.test/**", respond)
+        # Hold response parsing at an explicit gate, without timing-based sleeps.
+        page.add_init_script("""(() => {
+            const fetch = window.fetch.bind(window);
+            window.delayedWikiResponses = {};
+            window.releaseWikiResponses = {};
+            window.readWikiResponses = {};
+            window.fetch = async (...args) => {
+                const response = await fetch(...args);
+                const json = response.json.bind(response);
+                response.json = async () => {
+                    const value = await json();
+                    const path = new URL(response.url).pathname;
+                    if (window.delayedWikiResponses[path]) {
+                        delete window.delayedWikiResponses[path];
+                        await new Promise(resolve => window.releaseWikiResponses[path] = resolve);
+                    }
+                    window.readWikiResponses[path] = (window.readWikiResponses[path] || 0) + 1;
+                    return value;
+                };
+                return response;
+            };
+        })();""")
+
+        def choose(kind):
+            page.get_by_role(
+                "button", name="知识条目" if kind == "object" else "加工任务", exact=True
+            ).click()
+            page.locator(f'[data-{kind}="{ids[kind]}"]').click()
+
+        def release(path, reads):
+            page.wait_for_function("path => !!window.releaseWikiResponses[path]", arg=path)
+            page.evaluate("path => window.releaseWikiResponses[path]()", path)
+            page.wait_for_function(
+                "([path, reads]) => window.readWikiResponses[path] === reads", arg=[path, reads]
+            )
+
+        try:
+            page.goto("http://wiki.test/wiki")
+            page.wait_for_function("window.readWikiResponses['/api/manage/operations'] === 1")
+            choose(previous_kind)
+            expect(page.locator("#wiki-detail")).to_contain_text(
+                ids[previous_kind] if previous_kind == "job" else "优惠条件"
+            )
+            blocked_path = previous_path if delayed_stage == "detail" else "/api/knowledge/overview"
+            if delayed_stage == "selection":
+                blocked_path = selected_path
+            page.evaluate("path => window.delayedWikiResponses[path] = true", blocked_path)
+            if delayed_stage == "selection":
+                choose(selected_kind)
+            else:
+                page.get_by_role("button", name="刷新", exact=True).click()
+            page.wait_for_function("path => !!window.releaseWikiResponses[path]", arg=blocked_path)
+            if delayed_stage == "overview":
+                page.evaluate("path => window.delayedWikiResponses[path] = true", selected_path)
+            if delayed_stage == "selection":
+                page.get_by_role("button", name="刷新", exact=True).click()
+                page.wait_for_function("window.readWikiResponses['/api/manage/operations'] === 2")
+                page.evaluate("() => new Promise(requestAnimationFrame)")
+                assert requested.count(previous_path) == 1, "新选择加载时刷新不能重新打开旧详情"
+                assert requested.count(selected_path) == 2, "刷新应重新读取当前选择的目标"
+            else:
+                choose(selected_kind)
+            if delayed_stage == "overview":
+                page.wait_for_function(
+                    "path => !!window.releaseWikiResponses[path]", arg=selected_path
+                )
+            else:
+                page.wait_for_function(
+                    "path => window.readWikiResponses[path] === 1", arg=selected_path
+                )
+            release(blocked_path, 2)
+            if delayed_stage == "overview":
+                page.wait_for_function("window.readWikiResponses['/api/manage/operations'] === 2")
+                page.evaluate("() => new Promise(requestAnimationFrame)")
+                assert requested.count(previous_path) == 1, "旧刷新不能重新请求旧选择"
+                release(selected_path, 1)
+            expect(page).to_have_url(f"http://wiki.test/wiki#{selected_kind}/{ids[selected_kind]}")
+            if selected_kind == "job":
+                expect(page.locator("#wiki-detail")).to_contain_text(ids["job"])
+                expect(page.locator("#wiki-result-file")).to_be_enabled()
+                expect(page.locator("#wiki-review-reason")).to_have_count(0)
+            else:
+                expect(page.locator("#wiki-detail")).to_contain_text("优惠条件")
+                expect(page.locator("#wiki-review-reason")).to_be_visible()
+                expect(page.locator("#wiki-result-file")).to_have_count(0)
+            assert not errors
+        finally:
+            browser.close()
+
+
+@pytest.mark.skipif(
+    __import__("os").environ.get("FTR_WEB_BROWSER") != "1", reason="需要完整 Chromium 模式"
+)
 @pytest.mark.parametrize("width", [1440, 390])
 def test_browser_full_knowledge_wiki_flow(kb, tmp_path, width):
     import json
@@ -914,6 +1054,91 @@ def test_browser_full_knowledge_wiki_flow(kb, tmp_path, width):
             assert r.record_id in Path(dl.value.path()).read_text(encoding="utf-8")
             page.reload()
             expect(page.locator("#wiki-mode")).to_contain_text("本机管理")
+            preview_item = candidate(k, r)
+            page.get_by_role("button", name="刷新", exact=True).click()
+            page.locator(".wiki-management summary").click()
+            page.locator("#wiki-job-form [name=job_type]").select_option("compile")
+            page.locator("#wiki-job-form [name=output_mode]").select_option("preview")
+            page.locator(f'#wiki-knowledge input[value="{preview_item}"]').check()
+            page.get_by_role("button", name="创建待处理任务", exact=True).click()
+            preview_job = wait(
+                lambda: next(
+                    (
+                        j["id"]
+                        for j in k.listing("jobs")
+                        if j["package"]["request"].get("output_mode") == "preview"
+                    ),
+                    None,
+                )
+            )
+            package = k.package(preview_job)
+            preview_result = {
+                "job_id": preview_job,
+                "attempt_id": package["attempt_id"],
+                "input_digest": package["input_digest"],
+                "submission_key": "preview",
+                "outputs": [
+                    {
+                        "kind": "page",
+                        "title": "候选预览专题",
+                        "content": {
+                            "sections": [
+                                {
+                                    "section_id": "conditions",
+                                    "title": "适用条件",
+                                    "text": "有条件的候选说明",
+                                    "knowledge_versions": [preview_item],
+                                }
+                            ],
+                            "limitations": ["隔离虚构样本"],
+                        },
+                    }
+                ],
+            }
+            page.get_by_role("button", name="刷新", exact=True).click()
+            page.get_by_role("button", name="加工任务", exact=True).click()
+            page.locator(f'[data-job="{preview_job}"]').click()
+            source.write_text(json.dumps(preview_result, ensure_ascii=False), encoding="utf-8")
+            page.locator("#wiki-result-file").set_input_files(source)
+            wait(lambda: k.job(preview_job)["state"] == "completed")
+            preview_page = k.job(preview_job)["result"]["versions"][0]
+            preview_object = k.version(preview_page)["object_id"]
+            page.get_by_role("button", name="刷新", exact=True).click()
+            page.get_by_role("button", name="专题 Wiki", exact=True).click()
+            page.locator(f'[data-object="{preview_object}"]').click()
+            with page.expect_download() as dl:
+                page.get_by_role("link", name="导出 Markdown", exact=True).first.click()
+            assert "候选预览" in Path(dl.value.path()).read_text(encoding="utf-8")
+            assert k.object(preview_object)["current_version"] is None
+            page.get_by_text("政策身份与资料覆盖", exact=True).click()
+            page.locator("#wiki-policy-refresh").click()
+            expect(page.locator("#wiki-policy-groups")).to_contain_text("虚构企业所得税优惠")
+            page.get_by_text("研究报告校验与预览", exact=True).click()
+            report = {
+                "question": "虚构条件核对",
+                "as_of": "2026-11-06",
+                "claims": [
+                    {
+                        "text": "符合条件才可申请",
+                        "kind": "source_rule",
+                        "citations": [
+                            {
+                                "record_id": r.record_id,
+                                "evidence_id": r.evidence_id,
+                                "quote": "符合条件的主体可以申请。",
+                            }
+                        ],
+                    }
+                ],
+            }
+            source.write_text(json.dumps(report, ensure_ascii=False), encoding="utf-8")
+            page.locator("#wiki-research-file").set_input_files(source)
+            expect(page.locator("#wiki-research-status")).to_have_attribute(
+                "data-state", "needs_review"
+            )
+            with page.expect_download() as dl:
+                page.locator("#wiki-research-download").click()
+            assert "虚构条件核对" in Path(dl.value.path()).read_text(encoding="utf-8")
             assert not errors
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             evidence = os.environ.get("KNOWLEDGE_AUDIT_EVIDENCE")

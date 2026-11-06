@@ -1,0 +1,2 @@
+# Synthetic fixture hashes are computed over exact bytes on every platform.
+tests/fixtures/public_sources/*.html text eol=lf

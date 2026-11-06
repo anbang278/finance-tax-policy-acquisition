@@ -1,13 +1,13 @@
 {
   "name": "finance-tax-research",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "公开财税资料采集、证据管理与本地研究演示",
   "author": {"name": "Anbang"},
   "skills": "./skills/",
   "interface": {
     "displayName": "财税资料研究",
-    "shortDescription": "采集财政部与税务总局公开资料",
-    "longDescription": "通过可追溯证据采集财政部与税务总局公开资料，并在本地进行语义复核和研究。",
+    "shortDescription": "采集公开财税资料并开展证据研究",
+    "longDescription": "通过可追溯证据采集公开财税资料并开展证据研究，并在本地进行语义复核和研究。",
     "developerName": "Anbang",
     "category": "Productivity",
     "capabilities": ["Interactive", "Read"],

@@ -38,7 +38,7 @@ def install(app, root, authorize):
                 return {
                     "available": False,
                     "items": [],
-                    "message": "需要显式写入操作升级到知识库 v5；浏览不会自动迁移",
+                    "message": "需要显式写入操作升级到资料库 v6，浏览期间保留原版本",
                 }
             return fn(k)
 
@@ -52,6 +52,9 @@ def install(app, root, authorize):
                     (obj["id"],),
                 ).fetchone()
                 obj["candidate_version"] = candidate[0] if candidate else None
+                obj["candidate_usable"] = bool(
+                    candidate and obj["kind"] == "item" and k.preview_usable(candidate[0])
+                )
                 obj["dependency_state"] = (
                     k.dependency(obj["current_version"]) if obj["current_version"] else "unknown"
                 )
@@ -95,6 +98,28 @@ def install(app, root, authorize):
             }
         )
 
+    @app.get("/api/knowledge/policies")
+    def policies():
+        from ftr.policy import policy_groups
+
+        return query(lambda k: {"items": policy_groups(k.repo)})
+
+    @app.post("/api/manage/research/preview")
+    async def research_preview(request: Request):
+        from ftr.research import ResearchDraft, assess_and_render
+
+        authorize(request)
+        raw = bytearray()
+        async for part in request.stream():
+            raw.extend(part)
+            if len(raw) > MAX_RESULT_BYTES:
+                raise HTTPException(413, "报告超过4 MiB")
+        try:
+            draft = ResearchDraft.model_validate_json(bytes(raw))
+            return await run_in_threadpool(query, lambda k: assess_and_render(k.repo, draft))
+        except (ValueError, KeyError) as exc:
+            raise HTTPException(422, "研究报告或引用校验失败，请核对背景、资料版本和锚点") from exc
+
     @app.get("/api/knowledge/objects/{id}")
     def detail(id: str):
         return query(lambda k: k.detail(id))
@@ -116,8 +141,8 @@ def install(app, root, authorize):
         return query(lambda k: k.diff(id, version))
 
     @app.get("/api/knowledge/objects/{id}/export")
-    def export(id: str, version: str | None = None):
-        result = query(lambda k: k.export(id, version))
+    def export(id: str, version: str | None = None, preview: bool = False):
+        result = query(lambda k: k.export(id, version, preview=preview))
         if not isinstance(result, str):
             return result
         return Response(

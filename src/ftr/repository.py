@@ -7,6 +7,7 @@ from typing import Literal
 
 from ftr.models import (
     DecisionRequest,
+    DiscoveredRef,
     DocumentRecord,
     Evidence,
     SemanticDecision,
@@ -118,11 +119,11 @@ class Repository:
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys=ON")
         version = self.db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 5:
+        if version > 7:
             self.db.close()
             raise ValueError("数据库版本高于当前程序，请升级程序后再写入")
         if (
-            version < 5
+            version < 7
             and self.db.execute("SELECT 1 FROM sqlite_master WHERE name='documents'").fetchone()
         ):
             from ftr.backup import create_backup
@@ -200,10 +201,28 @@ class Repository:
             from ftr.knowledge.schema import SCHEMA as KNOWLEDGE_SCHEMA
 
             scripts.append(KNOWLEDGE_SCHEMA)
+        if version < 6:
+            from ftr.policy import SCHEMA as POLICY_SCHEMA
+
+            scripts.append(POLICY_SCHEMA)
+        if version < 7:
+            columns = {row[1] for row in self.db.execute("PRAGMA table_info(managed_plan)")}
+            if "scope_json" not in columns:
+                scripts.append(
+                    "ALTER TABLE managed_plan ADD COLUMN scope_json TEXT NOT NULL "
+                    'DEFAULT \'{"source_ids":["mof","chinatax"]}\';'
+                )
+            scripts.append("PRAGMA user_version=7;")
+            from ftr.policy import register_record
+
             try:
                 self.db.execute("PRAGMA foreign_keys=ON")
                 sql = "\n".join(scripts).replace("BEGIN;", "").replace("COMMIT;", "")
-                self.db.executescript("BEGIN;\n" + sql + "\nCOMMIT;")
+                self.db.executescript("BEGIN;\n" + sql)
+                if version < 6:
+                    for row in self.db.execute("SELECT record_json FROM documents").fetchall():
+                        register_record(self.db, DocumentRecord.model_validate_json(row[0]))
+                self.db.commit()
             except Exception:
                 self.db.rollback()
                 self.db.close()
@@ -219,17 +238,30 @@ class Repository:
         )
         self.db.commit()
 
-    def create_task(self, request: TaskRequest) -> str:
-        request_json = request.model_dump_json()
-        request_digest = digest(request_json.encode())
+    def create_task(self, request: TaskRequest, *, trusted_snapshot: bool = False) -> str:
+        from ftr.sources import freeze_scope
+
         if request.idempotency_key:
             row = self.db.execute(
                 "SELECT * FROM tasks WHERE idempotency_key=?", (request.idempotency_key,)
             ).fetchone()
             if row:
-                if row["request_digest"] != request_digest:
+                saved_request = json.loads(row["request_json"])
+                saved_request.setdefault("official_urls", [])
+                saved_snapshot = saved_request.pop("source_snapshot", {})
+                incoming = request.model_dump(mode="json")
+                incoming.pop("source_snapshot", None)
+                if saved_request != incoming or (
+                    request.source_snapshot and request.source_snapshot != saved_snapshot
+                ):
                     raise ValueError("相同幂等键对应不同任务输入")
                 return str(row["id"])
+        snapshot = freeze_scope(
+            request.source_ids, request.source_snapshot, trusted_snapshot=trusted_snapshot
+        )
+        request = request.model_copy(update={"source_snapshot": snapshot})
+        request_json = request.model_dump_json()
+        request_digest = digest(request_json.encode())
         task_id = new_id()
         with self.db:
             self.db.execute(
@@ -239,6 +271,24 @@ class Repository:
             for source_id in request.source_ids:
                 self.db.execute(
                     "INSERT INTO source_runs(task_id,source_id) VALUES(?,?)", (task_id, source_id)
+                )
+            for target in request.official_urls:
+                ref = DiscoveredRef(
+                    source_id=target.source_id,
+                    url=target.url,
+                    listing_title=target.title,
+                    listing_date_kind="targeted_no_listing_date",
+                    document_number_hint=target.document_number,
+                    discovered_from="task_request:" + request_digest,
+                )
+                self.db.execute(
+                    "INSERT INTO discovered(task_id,source_id,url,ref_json) VALUES(?,?,?,?)",
+                    (task_id, target.source_id, target.url, ref.model_dump_json()),
+                )
+            if request.official_urls:
+                self.db.execute(
+                    "UPDATE source_runs SET discovery_done=1,state='DISCOVERED' WHERE task_id=?",
+                    (task_id,),
                 )
         return task_id
 
@@ -382,6 +432,9 @@ class Repository:
                 ),
             )
             self.sync_attachments(task_id, record)
+            from ftr.policy import register_record
+
+            register_record(self.db, record)
             self.db.execute(
                 "UPDATE source_runs SET documents_count=documents_count+1 WHERE task_id=? AND source_id=?",
                 (task_id, record.source_id),
@@ -545,6 +598,9 @@ class Repository:
         return failure_id
 
     def search(self, query: str, include_limited: bool = False) -> list[DocumentRecord]:
+        from ftr.policy import policy_identity
+
+        query_identity = policy_identity(query, "", "query")
         rows = self.db.execute(
             "SELECT source_id,canonical_url,quality_state,record_json FROM documents "
             "ORDER BY source_id,canonical_url,source_version DESC,extraction_version DESC"
@@ -558,11 +614,24 @@ class Repository:
             for row in latest.values()
             if row["quality_state"] in allowed
         ]
-        return [
+        matches = [
             doc
             for doc in docs
             if query in doc.title
             or query in doc.body_text
             or query in (doc.document_number or "")
             or any(query in (a.text or "") for a in doc.attachments if a.extraction_state == "text")
+            or (
+                query_identity["identity_status"] == "candidate"
+                and policy_identity(doc.document_number, doc.title, doc.record_id)["policy_key"]
+                == query_identity["policy_key"]
+            )
         ]
+        if query_identity["identity_status"] == "candidate":
+            matches.sort(
+                key=lambda doc: (
+                    policy_identity(doc.document_number, doc.title, doc.record_id)["policy_key"]
+                    != query_identity["policy_key"]
+                )
+            )
+        return matches

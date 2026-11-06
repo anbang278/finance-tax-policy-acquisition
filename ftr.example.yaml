@@ -20,6 +20,9 @@ collection:
   max_documents: 1000
   max_duration_seconds: 1800  # 单次运行时间预算
   max_bytes_per_source: 500000000
+  max_pages_per_batch: 1000
+  max_documents_per_batch: 1000
+  max_bytes_per_batch: 500000000
 web:
   startup_timeout_seconds: 15  # lifecycle 启动总截止时间
   host: 127.0.0.1  # 团队局域网使用 0.0.0.0 或服务器网卡 IP

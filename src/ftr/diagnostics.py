@@ -261,8 +261,12 @@ def task_report(db, task_id):
                 "pages_scanned": run["pages_count"],
                 "discovery_done": done,
                 "coverage": "COMPLETE" if done else "UNKNOWN_REMAINDER",
-                "discovery_strategy": "full_enumeration",
-                "coverage_reason": "已到登记栏目末页"
+                "discovery_strategy": "explicit_url_list"
+                if request.get("mode") == "targeted"
+                else "full_enumeration",
+                "coverage_reason": "范围为冻结的官方URL清单"
+                if request.get("mode") == "targeted"
+                else "已到登记栏目末页"
                 if done
                 else "官方日期筛选与无日期条目的完整覆盖尚未获得证明，按栏目逐页核查",
                 "next_page": run["next_page"] if not done else None,

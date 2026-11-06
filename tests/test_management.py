@@ -318,8 +318,8 @@ def test_atomic_rollback_on_crash_and_replay(tmp_path, monkeypatch):
     enqueue(tmp_path, command)
     original = management.apply_command
 
-    def crash(*args):
-        original(*args)
+    def crash(*args, **kwargs):
+        original(*args, **kwargs)
         raise KeyboardInterrupt("simulated hard exit before completion")
 
     monkeypatch.setattr(management, "apply_command", crash)
@@ -759,7 +759,7 @@ def test_old_v3_readonly_review_before_incremental_migration(tmp_path):
     assert (tmp_path / "database.sqlite3").read_bytes() == before
     execute(tmp_path, "review.draft", conclusion(tmp_path, rid))
     with closing(Repository(tmp_path, readonly=True)) as repo:
-        assert repo.db.execute("PRAGMA user_version").fetchone()[0] == 5
+        assert repo.db.execute("PRAGMA user_version").fetchone()[0] == 7
     assert review_detail(tmp_path, rid)["draft"]
 
 

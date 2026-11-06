@@ -5,7 +5,7 @@ let uiConfig = {poll_interval_ms: 5000, request_timeout_ms: 10000};
 const $ = (selector) => document.querySelector(selector);
 const names = {
   source: {mof: '财政部', chinatax: '国家税务总局'},
-  type: {policy_file: '政策文件', policy_announcement: '政策公告', official_interpretation: '官方解读', release_message: '发布消息', other: '其他资料', unknown: '类型未确定'},
+  type: {policy_file: '政策文件', policy_announcement: '政策公告', official_interpretation: '官方解读', official_qa: '官方业务问答', release_message: '发布消息', other: '其他资料', unknown: '类型未确定'},
   quality: {collected: '待复核', validated: '已复核', quarantined: '内容受限', rejected: '已排除'},
   task: {CREATED: '已创建', RUNNING: '运行中（数据库记录）', WAITING_DECISION: '等待复核', PARTIAL: '部分完成', COMPLETED: '已完成', COMPLETED_EMPTY: '完成 · 无发现条目', CANCELLED: '已取消'},
   queue: {PENDING: '待获取', SAVED: '已保存', FAILED: '获取失败', OUT_OF_SCOPE: '范围外', UNCHANGED_SKIP: '未变化跳过'},
@@ -161,8 +161,8 @@ function renderPolicy(d, versions) {
     content = `<p class="body-note">来源版本与提取版本分别记录；只展示数据库实际保存的版本。</p>` + versions.map((v) => `<div class="version-row ${v.record_id === d.record_id ? 'current' : ''}"><div><strong>来源 v${v.source_version} · 提取 v${v.extraction_version}</strong><p>${esc(v.record_id.slice(0, 12))} · ${esc(label(names.quality, v.quality_state))}</p></div>${v.record_id === d.record_id ? '<span class="badge">当前阅读</span>' : `<button class="button" data-version="${esc(v.record_id)}">阅读此版本</button>`}</div>`).join('');
   } else {
     const evidence = d.evidence;
-    const rows = [['记录标识', d.record_id], ['正文证据', d.evidence_id], ['正文哈希', d.body_sha256 || '未记录'], ['原件保存时间', evidence ? stamp(evidence.retrieved_at) : '证据未登记'], ['原件类型', evidence?.media_type || '未记录'], ['原件大小', evidence ? `${evidence.size_bytes.toLocaleString()} 字节` : '未记录'], ['解析器版本', d.parser_version], ['来源效力标注', d.source_status_claim || '未提取'], ['字段出处', JSON.stringify(d.field_evidence)]];
-    content = `<dl class="evidence-grid">${rows.map(([key, value]) => `<dt>${esc(key)}</dt><dd>${esc(value)}</dd>`).join('')}</dl><p class="body-note">来源页面的效力标注按原记录展示，不代表系统已判定法律效力。</p>${evidence ? downloadLink(d.evidence_id, '下载保存的原始页面') : ''}`;
+    const rows = [['发布站点机构', d.source_publisher || names.source[d.source_id]], ['发文机关', (d.issuing_authorities || []).join('、') || '原文未提取'], ['适用地区', (d.applicable_regions || []).join('、') || '原文未提取'], ['资料阶段', ({formal:'正式',draft:'征求意见或草案',unknown:'待核实'})[d.content_stage] || '待核实'], ['采集说明', (d.collection_notes || []).join('；') || '无额外说明'], ['记录标识', d.record_id], ['正文证据', d.evidence_id], ['正文哈希', d.body_sha256 || '未记录'], ['原件保存时间', evidence ? stamp(evidence.retrieved_at) : '证据未登记'], ['原件类型', evidence?.media_type || '未记录'], ['原件大小', evidence ? `${evidence.size_bytes.toLocaleString()} 字节` : '未记录'], ['解析器版本', d.parser_version], ['来源效力标注', d.source_status_claim || '未提取'], ['字段出处', JSON.stringify(d.field_evidence)]];
+    content = `<dl class="evidence-grid">${rows.map(([key, value]) => `<dt>${esc(key)}</dt><dd>${esc(value)}</dd>`).join('')}</dl><p class="body-note">来源页面的效力标注按原记录展示，不代表系统已判定法律效力。</p>${evidence ? downloadLink(d.evidence_id, evidence.media_type?.includes('browser-dom') ? '下载保存的正文DOM快照' : '下载保存的原始页面') : ''}`;
   }
   updateNode($('#policy-detail'), header + `<div class="detail-tabs" role="tablist" aria-label="资料内容">${tabs.map(([key, title]) => `<button role="tab" aria-selected="${state.policyTab === key}" class="${state.policyTab === key ? 'active' : ''}" data-policy-tab="${key}">${title}</button>`).join('')}</div><div class="detail-body">${content}</div>`);
   applyMobile();
@@ -320,17 +320,74 @@ function navigate(view, id) {
   else location.hash = hash;
 }
 
+const catalogSelection = new Set();
+let catalogFrozen = null;
+const categoryLabels = {tax:'税收',fiscal:'财政',accounting:'会计',securities:'证券期货监管',law:'法律法规',practice:'官方解读与实务'};
+const verificationLabels = {passed:'通过',partial:'部分通过',blocked:'阻塞',needs_validation:'待验证',PASS:'通过',PARTIAL:'部分通过',BLOCKED:'阻塞'};
+function filteredSources() {
+  const query = $('#source-search').value.trim();
+  return state.sources.filter(s => (!query || `${s.name} ${s.publisher} ${s.channel}`.includes(query)) &&
+    (!$('#source-region').value || s.region === $('#source-region').value) &&
+    (!$('#source-authority').value || s.authority_id === $('#source-authority').value) &&
+    (!$('#source-category').value || (s.categories || []).includes($('#source-category').value)));
+}
+function invalidateScope() {catalogFrozen = null; $('#source-export').disabled = true; $('#source-scope-preview').textContent = '范围变化后请重新预览。';}
+function renderCatalog() {
+  const sources = filteredSources();
+  $('#source-selection-count').textContent = `显示 ${sources.length} 个栏目 · 已选 ${catalogSelection.size} 个`;
+  updateNode($('#sources-content'), sources.map(s => `<article class="source-card"><label class="check"><input type="checkbox" data-catalog-source="${esc(s.source_id)}" ${catalogSelection.has(s.source_id) ? 'checked' : ''} ${s.selectable === false ? 'disabled' : ''}>${esc(s.name)}</label>${external(s.entry, '打开官方栏目')}<dl class="evidence-grid"><dt>来源标识</dt><dd>${esc(s.source_id)}</dd><dt>机构 / 地区</dt><dd>${esc(s.publisher || s.authority_id)} / ${esc(s.region)}</dd><dt>内容类别</dt><dd>${esc((s.categories || []).map(c => categoryLabels[c] || c).join('、'))}</dd><dt>栏目 / 日期口径</dt><dd>${esc(s.channel)} / ${esc(dateName(s.listing_date_kind))}</dd><dt>已采集资料</dt><dd>${s.policies_count} 份</dd><dt>访问方式</dt><dd>${s.adapter === 'pending' ? '待核实' : ['chinatax','public_browser'].includes(s.adapter) ? '正常浏览器会话' : 'HTTP 静态栏目'}</dd><dt>样本验证</dt><dd>${esc(verificationLabels[s.verification_status] || s.verification_status)}</dd></dl><p class="body-note">${esc(s.verification_note)} 来源可用性未进行实时检测。</p></article>`).join('') || '<p>当前筛选没有来源。</p>');
+}
+async function loadSourceCatalog() {
+  const data = await api('/api/sources');
+  state.sources = data.items;
+  names.source = Object.fromEntries(data.items.map(s => [s.source_id,s.name]));
+  const select = $('#policy-filters [name="source_id"]');
+  const selected = select.value; select.innerHTML = options(names.source,'全部来源',selected);
+  $('#source-region').innerHTML = options(Object.fromEntries([...new Set(data.items.map(s => s.region))].map(v => [v,v])),'全部地区',$('#source-region').value);
+  $('#source-authority').innerHTML = options(Object.fromEntries(data.items.map(s => [s.authority_id,s.publisher || s.name])),'全部机构',$('#source-authority').value);
+  $('#source-category').innerHTML = options(categoryLabels,'全部类别',$('#source-category').value);
+}
 async function showSources(sourceId) {
   const dialog = $('#sources-dialog');
-  updateNode($('#sources-content'), '<p class="body-note">正在读取来源信息…</p>');
   if (!dialog.open) dialog.showModal();
+  $('#source-search').value = sourceId ? names.source[sourceId] || sourceId : '';
+  const today = new Date().toLocaleDateString('en-CA');
+  $('#source-date-from').value ||= today;
+  $('#source-date-to').value ||= today;
+  if (state.sources.length) renderCatalog();
   try {
-    const data = await api('/api/sources');
-    state.sources = data.items;
-    const sources = sourceId ? data.items.filter((s) => s.source_id === sourceId) : data.items;
-    updateNode($('#sources-content'), sources.map((s) => `<article class="source-card"><h3>${esc(s.name)}</h3>${external(s.entry, s.entry)}<dl class="evidence-grid"><dt>来源标识</dt><dd>${esc(s.source_id)}</dd><dt>来源日期口径</dt><dd>${esc(dateName(s.listing_date_kind))}</dd><dt>已采集资料</dt><dd>${s.policies_count} 份</dd><dt>登记主机</dt><dd>${s.allowed_hosts.map(esc).join('<br>')}</dd><dt>采集方式</dt><dd>${s.source_id === 'mof' ? 'HTTP · 静态栏目' : '正常浏览器会话 · requests'}</dd></dl><p class="body-note">来源可用性未进行实时检测。</p></article>`).join(''));
+    await loadSourceCatalog();
+    renderCatalog();
   } catch (error) {updateNode($('#sources-content'), `<p class="limitation">${esc(error.message)}</p>`);}
 }
+$('#source-catalog-filters').addEventListener('input', () => {invalidateScope(); renderCatalog();});
+$('#sources-content').addEventListener('change', event => {
+  const id = event.target.dataset.catalogSource; if (!id) return;
+  if (event.target.checked) catalogSelection.add(id); else catalogSelection.delete(id);
+  invalidateScope(); renderCatalog();
+});
+$('#source-select-visible').addEventListener('click', () => {filteredSources().filter(s => s.selectable !== false).forEach(s => catalogSelection.add(s.source_id)); invalidateScope(); renderCatalog();});
+$('#source-clear').addEventListener('click', () => {catalogSelection.clear(); invalidateScope(); renderCatalog();});
+$('#source-use-now').addEventListener('click', () => {
+  if (!catalogSelection.size) {$('#source-scope-preview').textContent = '请先选择来源。'; return;}
+  document.dispatchEvent(new CustomEvent('ftr-source-selection',{detail:{source_ids:[...catalogSelection]}}));
+  $('#sources-dialog').close(); navigate('scheduler');
+});
+$('#source-catalog-filters').addEventListener('submit', async event => {
+  event.preventDefault();
+  try {
+    const request = {source_ids:[...catalogSelection],date_from:$('#source-date-from').value,date_to:$('#source-date-to').value,max_pages:Number($('#source-pages').value),max_documents:Number($('#source-documents').value)};
+    const result = await fetch('/api/sources/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request)});
+    const data = await result.json(); if (!result.ok) throw new Error(data.error?.message || '预览失败');
+    catalogFrozen = data.request; $('#source-export').disabled = false;
+    $('#source-scope-preview').textContent = `${request.date_from} — ${request.date_to}；${request.source_ids.length} 个栏目；每来源最多 ${request.max_pages} 页 / ${request.max_documents} 份正文；整批最多 ${data.budget.max_pages_per_batch} 页 / ${data.budget.max_documents_per_batch} 份 / ${data.budget.max_bytes_per_batch} 字节。栏目入口与日期口径已随请求冻结。`;
+  } catch (error) {invalidateScope(); $('#source-scope-preview').textContent = error.message;}
+});
+$('#source-export').addEventListener('click', () => {
+  if (!catalogFrozen) return;
+  const url = URL.createObjectURL(new Blob([JSON.stringify(catalogFrozen,null,2)],{type:'application/json'}));
+  const link = document.createElement('a'); link.href=url; link.download='policy-source-request.json'; link.click(); URL.revokeObjectURL(url);
+});
 
 let policyDebounce, queueDebounce;
 $('#policy-filters').addEventListener('submit', (event) => {event.preventDefault(); clearTimeout(policyDebounce); state.policyPage = 1; changed();});
@@ -413,6 +470,7 @@ async function refreshUpdateStatus() {
 async function start() {
   try {
     uiConfig = await api('/api/ui-config');
+    await loadSourceCatalog();
     await bootstrapManagement();
     route();
     refreshUpdateStatus();

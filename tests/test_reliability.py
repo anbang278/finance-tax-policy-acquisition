@@ -70,6 +70,66 @@ def test_status_retries_are_bounded_and_restricted_errors_stop(monkeypatch, kind
         client.close()
 
 
+@pytest.mark.parametrize("kind", ["httpx", "requests"])
+@pytest.mark.parametrize("content_length", [False, True])
+@pytest.mark.parametrize(
+    "file_limit,remaining,size,error",
+    [
+        (1000, 100, 150, BudgetReached),
+        (100, 1000, 150, network.AccessBlocked),
+        (100, 50, 150, network.AccessBlocked),
+        (150, 150, 150, None),
+    ],
+)
+def test_download_limit_distinguishes_remaining_budget_from_file_limit(
+    monkeypatch, kind, content_length, file_limit, remaining, size, error
+):
+    monkeypatch.setattr(network, "check_url", lambda *_: "www.mof.gov.cn")
+    client = (network.BoundedClient if kind == "httpx" else network.BrowserSessionClient)(
+        ["www.mof.gov.cn"], interval=0, max_bytes=file_limit, proxy=None
+    )
+    owner = SimpleNamespace(
+        _checkpoint=lambda *_: None,
+        _remaining_bytes=lambda *_: remaining,
+        settings=SimpleNamespace(network=SimpleNamespace(max_file_bytes=file_limit)),
+        detail_limit=None,
+    )
+    client.before_request = lambda url: Collector._network_request(
+        owner, "task", "mof", 0, url, client
+    )
+    headers = {"content-length": str(size)} if content_length else {}
+    calls = []
+    if kind == "httpx":
+        client._client.close()
+
+        def respond(request):
+            calls.append(request)
+            return httpx.Response(200, headers=headers, stream=httpx.ByteStream(b"x" * size))
+
+        client._client = httpx.Client(transport=httpx.MockTransport(respond))
+    else:
+        import requests
+
+        def respond(*args, **kwargs):
+            calls.append(args)
+            response = requests.Response()
+            response.status_code, response.url = 200, "https://www.mof.gov.cn/"
+            response.headers.update(headers)
+            response._content, response._content_consumed = b"x" * size, True
+            return response
+
+        client._session.request = respond
+    try:
+        if error:
+            with pytest.raises(error):
+                client.get("https://www.mof.gov.cn/")
+        else:
+            assert client.get("https://www.mof.gov.cn/")[0] == b"x" * size
+        assert len(calls) == 1
+    finally:
+        client.close()
+
+
 def test_retry_success_and_checkpoint_prevents_next_request(monkeypatch):
     monkeypatch.setattr(network, "check_url", lambda *_: "www.mof.gov.cn")
     client = network.BoundedClient(["www.mof.gov.cn"], interval=0, proxy=None)

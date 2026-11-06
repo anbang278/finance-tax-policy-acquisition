@@ -118,7 +118,11 @@ def parse_detail(ref: DiscoveredRef, raw: bytes, evidence_id: str, rules=None) -
         if not full.startswith("https://"):
             continue
         label = text_of(link)
-        if re.search(r"\.(pdf|docx?|xlsx?)(?:\?|$)", full, re.IGNORECASE):
+        if re.search(
+            r"\.(pdf|docx?|xlsx?|wps|wpt|et|ett|zip|rar|7z|ofd|rtf|csv|pptx?)(?:\?|$)",
+            full,
+            re.IGNORECASE,
+        ):
             primary = ref.source_id == "chinatax" and bool(
                 link.xpath("ancestor::div[contains(@class,'arc_cont')]")
             )
@@ -138,8 +142,13 @@ def parse_detail(ref: DiscoveredRef, raw: bytes, evidence_id: str, rules=None) -
     number = ref.document_number_hint or (number_match.group(0).strip() if number_match else None)
     if not body and attachments:
         attachments[0].content_role = "primary"
+    from ftr.config import load_sources
+
+    source_config = load_sources().sources.get(ref.source_id)
     record = DocumentRecord(
         source_id=ref.source_id,
+        source_publisher=(source_config.publisher or source_config.name) if source_config else "",
+        categories=source_config.categories if source_config else [],
         source_url=ref.url,
         canonical_url=canonical_url(ref.url),
         listing_title=ref.listing_title,
